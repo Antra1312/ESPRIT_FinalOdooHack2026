@@ -1,7 +1,7 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const { initializeDatabase, disconnectDatabase, isPostgreSQL, DB_PROVIDER } = require('./src/config/database');
 
 dotenv.config();
 
@@ -12,28 +12,37 @@ app.use(cors({ origin: process.env.CORS_ORIGIN }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Database Connection
-mongoose.connect(process.env.DB_HOST, {
-  dbName: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  pass: process.env.DB_PASSWORD,
-})
-  .then(() => console.log('✅ Database connected'))
-  .catch((err) => console.error('❌ Database connection error:', err));
-
-// Routes
-app.use('/api/employees', require('./backend/routes/employeeRoutes'));
-app.use('/api/contracts', require('./backend/routes/contractRoutes'));
-app.use('/api/attendance', require('./backend/routes/attendanceRoutes'));
-app.use('/api/timeoff', require('./backend/routes/timeoffRoutes'));
-app.use('/api/payroll', require('./backend/routes/payrollRoutes'));
-app.use('/api/payslips', require('./backend/routes/payslipRoutes'));
-app.use('/api/dashboard', require('./backend/routes/dashboardRoute'));
+// Initialize database based on provider
+initializeDatabase()
+  .then(({ provider }) => {
+    console.log(`📦 Database provider: ${provider}`);
+  })
+  .catch((err) => {
+    console.error('❌ Database initialization failed:', err);
+    process.exit(1);
+  });
 
 // Health Check
-app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+app.get('/health', (req, res) => res.json({
+  status: 'ok',
+  timestamp: new Date(),
+  dbProvider: DB_PROVIDER,
+}));
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  await disconnectDatabase();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  await disconnectDatabase();
+  process.exit(0);
+});
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT} (DB: ${DB_PROVIDER})`));
 
 module.exports = app;

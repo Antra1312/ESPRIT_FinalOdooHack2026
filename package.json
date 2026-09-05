@@ -1,0 +1,29 @@
+{
+  "name": "peoplepay360",
+  "version": "1.0.0",
+  "description": "HR & Payroll Platform - Odoo 2026 Final Round",
+  "main": "backend/index.js",
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:format": "prisma format",
+    "prisma:validate": "prisma validate",
+    "prisma:studio": "prisma studio",
+    "db:push": "prisma db push",
+    "backend:dev": "node backend/index.js",
+    "setup": "npm install && npm run prisma:generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "mongoose": "^8.8.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
