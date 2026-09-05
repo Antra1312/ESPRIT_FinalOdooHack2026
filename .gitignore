@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+/target/
+/.parcel-cache/
+/dist/
+/build/
+
+# Environment Variables
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+logs/
+debug.log
+
+# Runtime stuff
+pids/
+*.pid
+*.seed.*
+
+# Coverage reports
+coverage/
+*.8 coverage
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+/Library/
+
+# Backend specific
+backend/*.pid
+backend/*.seed.*
+
+# Frontend specific
+frontend/.env.local
+frontend/.env.production
