@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { DB, fmtMoney, periodLabel } from '../data/mockData';
+import { api } from '../api';
 
 export default function PayslipDetail(){
   const {id}=useParams();
@@ -10,7 +11,8 @@ export default function PayslipDetail(){
   const pr=DB.payruns.find(p=>p.id===ps.payrunId);
 
   const print=()=>{
-    const w=window.open('','_blank');
+    window.open(api.payslipPdfUrl(ps.id), '_blank', 'noopener');
+    /*const w=window.open('','_blank');
     w.document.write(`
       <html><head><title>Payslip - ${emp.name}</title><style>
         body{font-family:Inter,sans-serif;padding:40px;color:#121826}
@@ -27,14 +29,14 @@ export default function PayslipDetail(){
       <div style="margin-top:16px;font-weight:700">Gross: ${fmtMoney(ps.gross)} | Deductions: ${fmtMoney(ps.deductions)} | Net: ${fmtMoney(ps.net)}</div>
       </body></html>
     `);
-    w.document.close(); w.print();
+    w.document.close(); w.print();*/
   };
 
   return (
     <div>
       <div className="breadcrumb"><a onClick={()=>nav(`/payroll/${pr?.id}`)} style={{cursor:'pointer'}}>Payrun</a> / Payslip</div>
       <div className="pageHead"><div><h1>{emp.name} — {periodLabel(ps.period)}</h1><div className="desc">{pr?.name} · {ps.status}</div></div>
-        <button className="btn solid" onClick={print}>Print / Save PDF</button>
+        <button className="btn solid" onClick={print}>Download PDF</button>
       </div>
       <div className="card"><div className="cardHead"><h3>Salary Computation</h3></div>
         <div className="cardBody">

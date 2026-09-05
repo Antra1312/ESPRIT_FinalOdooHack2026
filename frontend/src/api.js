@@ -33,6 +33,7 @@ export const api = {
   validatePayrun: (id) => request(`/payroll/payruns/${id}/validate`, { method: 'POST' }),
   payPayrun: (id) => request(`/payroll/payruns/${id}/pay`, { method: 'POST' }),
   sendPayrun: (id) => request(`/payroll/payruns/${id}/send`, { method: 'POST' }),
+  payslipPdfUrl: (id) => `${API_URL}/payroll/payslips/${id}/pdf`,
 };
 
 export function replacePayrunInDb(payrun) {
