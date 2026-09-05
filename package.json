@@ -8,6 +8,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:format": "prisma format",
     "prisma:validate": "prisma validate",
+    "db:seed": "prisma db seed",
     "prisma:studio": "prisma studio",
     "db:push": "prisma db push",
     "backend:dev": "node backend/index.js",
@@ -22,6 +23,9 @@
   },
   "devDependencies": {
     "prisma": "^5.22.0"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   },
   "engines": {
     "node": ">=18.0.0"

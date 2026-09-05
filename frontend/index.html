@@ -266,7 +266,7 @@ tbody tr.clickable:hover{background:#F7FAFD;cursor:pointer;}
    Vanilla JS, in-memory data model. No backend. Data resets on reload.
    ========================================================================= */
 
-const DEMO_TODAY = new Date('2026-09-05T00:00:00');
+const DEMO_TODAY = new Date();
 let UID_COUNTER = 1000;
 function uid(prefix){ return prefix + '_' + (UID_COUNTER++); }
 function fmtMoney(n){ return '₹' + Math.round(n).toLocaleString('en-IN'); }
@@ -279,7 +279,24 @@ function colorFor(seed){ const colors=['#0EA5A0','#123A5E','#C77D14','#7C5CBF','
    SEED DATA
 --------------------------------------------------------------------- */
 const DB = { employees:[], contracts:[], schedules:[], attendance:[], timeoffTypes:[], allocations:[], requests:[], structures:[], rules:[], payruns:[], payslips:[] };
+const API_BASE = window.PEOPLEPAY_API_BASE || 'http://localhost:4000/api';
+let DB_READY = false;
+async function loadDatabase(){
+  const response = await fetch(`${API_BASE}/bootstrap?_=${Date.now()}`, { cache:'no-store' });
+  if(!response.ok) throw new Error(`Unable to load database records (${response.status})`);
+  const data = await response.json();
+  Object.assign(DB, {
+    employees:data.employees || [], contracts:data.contracts || [], schedules:data.schedules || [],
+    attendance:data.attendance || [], timeoffTypes:data.timeoffTypes || [], allocations:data.allocations || [],
+    requests:data.requests || [], structures:data.structures || [], rules:data.rules || [],
+    payruns:data.payruns || [], payslips:data.payslips || []
+  });
+  DB_READY = true;
+}
 
+/*
+Legacy browser demo records are intentionally disabled. All records must come
+from the database bootstrap API below.
 // Schedules
 DB.schedules.push(
   { id:'sch1', name:'Standard 40h', type:'Fixed', days:[
@@ -388,6 +405,10 @@ DB.requests.push(
   {id:uid('RQ'),employeeId:'E6',typeId:'TT1',from:'2026-09-18',to:'2026-09-19',duration:2,status:'Pending',reason:'Personal travel'},
   {id:uid('RQ'),employeeId:'E3',typeId:'TT3',from:'2026-07-05',to:'2026-07-05',duration:1,status:'Rejected',reason:'Unplanned'}
 );
+*/
+function weeklyHours(s){ let mins=0; (s?.days || []).forEach(d=>{ if(d.on&&d.start&&d.end){ const [sh,sm]=d.start.split(':').map(Number); const [eh,em]=d.end.split(':').map(Number); mins += (eh*60+em)-(sh*60+sm)-(d.brk||0); } }); return Math.round(mins/60*10)/10; }
+function getAlloc(employeeId,typeId){ return DB.allocations.find(a=>a.employeeId===employeeId&&a.typeId===typeId); }
+function allocRemaining(a){ return a ? a.allocated - a.used : 0; }
 
 /* ---------------------------------------------------------------------
    HELPERS: contract selection, payroll computation, warnings
@@ -490,7 +511,8 @@ function sendPayslips(payrunId){
   payrun.sent = true;
 }
 
-// Seed two historical, already-paid payruns so the Dashboard has trend data
+if (false) {
+// Legacy browser payroll seeds are disabled; payroll records come from Prisma.
 function seedHistoricalPayrun(name, period){
   const regularEmployees = DB.contracts.filter(c=>c.structureId==='st_regular').map(c=>c.employeeId);
   const uniqueIds = [...new Set(regularEmployees)];
@@ -510,6 +532,7 @@ seedHistoricalPayrun('August 2026 — Regular Salary','2026-08');
   const regularEmployees = [...new Set(DB.contracts.filter(c=>c.structureId==='st_regular').map(c=>c.employeeId))];
   DB.payruns.push({ id:uid('PR'), name:'September 2026 — Regular Salary', structureId:'st_regular', period:'2026-09', employeeIds:regularEmployees, status:'Draft', warnings:[], sent:false, createdDate:'2026-09-01' });
 })();
+}
 
 /* =========================================================================
    APP STATE / ROUTER
@@ -521,8 +544,6 @@ const ROLES = {
   hr_payroll_manager:{ label:'HR Payroll Manager', color:'#7C5CBF' },
   admin:{ label:'Admin', color:'#C1373B' }
 };
-const ROLE_DEMO_USER = { employee:'E1', hr_manager:'E9', hr_payroll_user:'E8', hr_payroll_manager:'E2', admin:'E2' };
-
 const NAV_ITEMS = [
   {key:'dashboard', label:'Dashboard', roles:['hr_manager','hr_payroll_user','hr_payroll_manager','admin']},
   {key:'employees', label:'Employees', roles:['employee','hr_manager','hr_payroll_user','hr_payroll_manager','admin']},
@@ -539,8 +560,9 @@ const St = { user:null, route:'dashboard', sub:{}, };
 const App = {
 
 login(role){
-  const empId = ROLE_DEMO_USER[role];
-  St.user = { role, employeeId: role==='employee'?empId:null, name: role==='employee'?getEmp(empId).name:getEmp(empId).name, actorId: empId };
+  const emp = DB.employees[role==='employee' ? 0 : Math.min(1, Math.max(0, DB.employees.length-1))];
+  if(!emp) return toast('Database records are still loading', 'warn');
+  St.user = { role, employeeId: role==='employee'?emp.id:null, name:emp.name, actorId:emp.id };
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appShell').style.display='flex';
   document.getElementById('rolePillLabel').textContent = ROLES[role].label;
@@ -611,21 +633,23 @@ Views.dashboard = function(){
   const periods = [...new Set(DB.payruns.map(p=>p.period))].sort();
   const filterPeriod = St.sub.dashPeriod || periods[periods.length-1];
   const filterDept = St.sub.dashDept || 'All';
+  const inDepartment = employeeId => filterDept==='All' || getEmp(employeeId)?.dept===filterDept;
 
-  const payslipsInPeriod = DB.payslips.filter(p=>p.period===filterPeriod && (filterDept==='All' || getEmp(p.employeeId).dept===filterDept));
+  const payslipsInPeriod = DB.payslips.filter(p=>p.period===filterPeriod && inDepartment(p.employeeId));
   const paidSlips = payslipsInPeriod.filter(p=>p.status==='Paid');
   const totalNet = paidSlips.reduce((s,p)=>s+p.net,0);
   const avgSalary = payslipsInPeriod.length ? Math.round(payslipsInPeriod.reduce((s,p)=>s+p.net,0)/payslipsInPeriod.length) : 0;
-  const approvedLeave = DB.requests.filter(r=>r.status==='Approved').length;
-  const attRecords = DB.attendance;
-  const attHealthy = attRecords.filter(a=>a.status==='Normal').length;
+  const approvedLeave = DB.requests.filter(r=>r.status==='Approved' && inDepartment(r.employeeId)).length;
+  const pendingReq = DB.requests.filter(r=>r.status==='Pending' && inDepartment(r.employeeId)).length;
+  const attRecords = DB.attendance.filter(a=>inDepartment(a.employeeId));
+  const attHealthy = attRecords.filter(a=>['Present','Late','Overtime'].includes(a.status)).length;
   const attHealth = attRecords.length? Math.round(attHealthy/attRecords.length*100):100;
 
   const deptTotals = {};
   payslipsInPeriod.forEach(p=>{ const d=getEmp(p.employeeId).dept; deptTotals[d]=(deptTotals[d]||0)+p.net; });
   const maxDept = Math.max(1,...Object.values(deptTotals));
 
-  const trend = periods.map(p=>({p, val: DB.payslips.filter(x=>x.period===p && x.status==='Paid').reduce((s,x)=>s+x.net,0)}));
+  const trend = periods.map(p=>({p, val: DB.payslips.filter(x=>x.period===p && x.status==='Paid' && inDepartment(x.employeeId)).reduce((s,x)=>s+x.net,0)}));
   const maxTrend = Math.max(1,...trend.map(t=>t.val));
 
   const allWarnings = [];
@@ -636,8 +660,10 @@ Views.dashboard = function(){
   const statusCounts = {Draft:0,Computed:0,Validated:0,Paid:0};
   DB.payruns.forEach(pr=>statusCounts[pr.status]=(statusCounts[pr.status]||0)+1);
 
-  const pendingReq = DB.requests.filter(r=>r.status==='Pending').length;
-  const avgRemaining = Math.round(DB.allocations.filter(a=>a.typeId==='TT1').reduce((s,a)=>s+allocRemaining(a),0)/DB.employees.length);
+  const annualType = DB.timeoffTypes.find(t=>t.name.toLowerCase().includes('annual'));
+  const scopedEmployees = DB.employees.filter(e=>inDepartment(e.id));
+  const annualAllocations = annualType ? DB.allocations.filter(a=>a.typeId===annualType.id && inDepartment(a.employeeId)) : [];
+  const avgRemaining = Math.round(annualAllocations.reduce((s,a)=>s+allocRemaining(a),0)/(scopedEmployees.length || 1));
 
   body().innerHTML = `
     <div class="pageHead">
@@ -648,7 +674,7 @@ Views.dashboard = function(){
         ${periods.map(p=>`<option value="${p}" ${p===filterPeriod?'selected':''}>${periodLabel(p)}</option>`).join('')}
       </select>
       <select onchange="St.sub.dashDept=this.value; App.go('dashboard')">
-        ${['All','IT','HR','Finance','Sales'].map(d=>`<option value="${d}" ${d===filterDept?'selected':''}>${d==='All'?'All departments':d}</option>`).join('')}
+        ${['All',...new Set(DB.employees.map(e=>e.dept).filter(Boolean))].map(d=>`<option value="${d}" ${d===filterDept?'selected':''}>${d==='All'?'All departments':d}</option>`).join('')}
       </select>
     </div>
     <div class="kpiGrid">
@@ -767,7 +793,7 @@ Views['employee-detail'] = function(params){
       <div class="smartBtn"><div class="n">${contracts.length}</div><div class="l">📄 Contracts</div></div>
       <div class="smartBtn"><div class="n">${att.length}</div><div class="l">🕐 Attendance entries</div></div>
       <div class="smartBtn"><div class="n">${reqs.length}</div><div class="l">🏖️ Time off requests</div></div>
-      <div class="smartBtn"><div class="n">${allocRemaining(getAlloc(emp.id,'TT1'))}</div><div class="l">Annual leave days left</div></div>
+      <div class="smartBtn"><div class="n">${allocRemaining((()=>{const t=DB.timeoffTypes.find(x=>x.name.toLowerCase().includes('annual')); return t&&getAlloc(emp.id,t.id);})())}</div><div class="l">Annual leave days left</div></div>
     </div>
     <div class="tabs">
       ${['overview','contracts','attendance','timeoff'].map(t=>`<button class="tabbtn ${tab===t?'active':''}" onclick="St.sub.empTab='${t}'; App.go('employee-detail',{id:'${emp.id}'})">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}
@@ -1122,7 +1148,7 @@ Forms.employee = function(id){
     <div class="modalHead"><h3>${e?'Edit Employee':'New Employee'}</h3><button class="modalClose" onclick="closeModal()">×</button></div>
     <div class="modalBody"><div class="formGrid">
       <div class="field full"><label>Full name</label><input id="f_name" value="${e?e.name:''}"></div>
-      <div class="field"><label>Department</label><select id="f_dept">${['IT','HR','Finance','Sales'].map(d=>`<option ${e&&e.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
+      <div class="field"><label>Department</label><select id="f_dept">${[...new Set(DB.employees.map(x=>x.dept).filter(Boolean))].map(d=>`<option ${e&&e.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
       <div class="field"><label>Position</label><input id="f_position" value="${e?e.position:''}"></div>
       <div class="field"><label>Manager</label><select id="f_manager"><option value="">— None —</option>${DB.employees.filter(x=>x.id!==id).map(m=>`<option value="${m.id}" ${e&&e.managerId===m.id?'selected':''}>${m.name}</option>`).join('')}</select></div>
       <div class="field"><label>Working Schedule</label><select id="f_schedule">${DB.schedules.map(s=>`<option value="${s.id}" ${e&&e.scheduleId===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>
@@ -1130,7 +1156,7 @@ Forms.employee = function(id){
       <div class="field"><label>Phone</label><input id="f_phone" value="${e?e.phone:''}"></div>
       <div class="field"><label>Bank Account</label><input id="f_bank" value="${e?e.bankAccount:''}" placeholder="e.g. HDFC •••• 4521"></div>
       <div class="field"><label>PAN</label><input id="f_pan" value="${e?e.pan:''}"></div>
-      <div class="field"><label>Join Date</label><input type="date" id="f_join" value="${e?e.joinDate:'2026-09-05'}"></div>
+      <div class="field"><label>Join Date</label><input type="date" id="f_join" value="${e?e.joinDate:new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>Status</label><select id="f_status">${['Active','Inactive'].map(s=>`<option ${e&&e.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
     </div></div>
     <div class="modalFoot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn solid" onclick="Forms.saveEmployee('${id||''}')">Save Employee</button></div>
@@ -1153,10 +1179,10 @@ Forms.contract = function(id, presetEmpId){
     <div class="modalBody"><div class="formGrid">
       <div class="field full"><label>Employee</label><select id="f_emp">${DB.employees.map(e=>`<option value="${e.id}" ${(c&&c.employeeId===e.id)||(presetEmpId===e.id)?'selected':''}>${e.name}</option>`).join('')}</select></div>
       <div class="field"><label>Position</label><input id="f_position" value="${c?c.position:''}"></div>
-      <div class="field"><label>Department</label><select id="f_dept">${['IT','HR','Finance','Sales'].map(d=>`<option ${c&&c.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
+      <div class="field"><label>Department</label><select id="f_dept">${[...new Set(DB.employees.map(x=>x.dept).filter(Boolean))].map(d=>`<option ${c&&c.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
       <div class="field"><label>Wage / CTC per month (₹)</label><input type="number" id="f_wage" value="${c?c.wage:''}"></div>
       <div class="field"><label>Salary Structure</label><select id="f_structure">${DB.structures.map(s=>`<option value="${s.id}" ${c&&c.structureId===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>
-      <div class="field"><label>Start Date</label><input type="date" id="f_start" value="${c?c.startDate:'2026-09-01'}"></div>
+      <div class="field"><label>Start Date</label><input type="date" id="f_start" value="${c?c.startDate:new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>End Date (blank = ongoing)</label><input type="date" id="f_end" value="${c&&c.endDate?c.endDate:''}"></div>
     </div>
     <div class="hint">💡 Old contracts are never deleted — they remain as history. Payroll automatically selects whichever contract's date range covers the payrun period.</div>
@@ -1256,8 +1282,8 @@ Forms.request = function(){
     <div class="modalBody"><div class="formGrid">
       ${isSelf?`<input type="hidden" id="f_emp" value="${St.user.actorId}">`:`<div class="field full"><label>Employee</label><select id="f_emp">${DB.employees.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}</select></div>`}
       <div class="field full"><label>Type</label><select id="f_type">${DB.timeoffTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}</select></div>
-      <div class="field"><label>From</label><input type="date" id="f_from" value="2026-09-15"></div>
-      <div class="field"><label>To</label><input type="date" id="f_to" value="2026-09-15"></div>
+      <div class="field"><label>From</label><input type="date" id="f_from" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>To</label><input type="date" id="f_to" value="${new Date().toISOString().slice(0,10)}"></div>
       <div class="field full"><label>Reason</label><textarea id="f_reason" rows="2"></textarea></div>
     </div></div>
     <div class="modalFoot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn solid" onclick="Forms.saveRequest()">Submit Request</button></div>
@@ -1281,8 +1307,8 @@ Forms.allocation = function(){
       <div class="field full"><label>Type</label><select id="f_type">${DB.timeoffTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}</select></div>
       <div class="field"><label>Allocated (days)</label><input type="number" id="f_alloc" value="20"></div>
       <div class="field"><label>Already used</label><input type="number" id="f_used" value="0"></div>
-      <div class="field"><label>Valid from</label><input type="date" id="f_vfrom" value="2026-01-01"></div>
-      <div class="field"><label>Valid to</label><input type="date" id="f_vto" value="2026-12-31"></div>
+      <div class="field"><label>Valid from</label><input type="date" id="f_vfrom" value="${new Date(new Date().getFullYear(),0,1).toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Valid to</label><input type="date" id="f_vto" value="${new Date(new Date().getFullYear(),11,31).toISOString().slice(0,10)}"></div>
     </div></div>
     <div class="modalFoot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn solid" onclick="Forms.saveAllocation()">Save Allocation</button></div>
   `);
@@ -1448,6 +1474,9 @@ Wizard.create = function(){
    INIT
    ========================================================================= */
 window.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+loadDatabase().catch(error=>{
+  document.getElementById('appBody').innerHTML = `<div class="emptyState">Unable to load database records: ${error.message}</div>`;
+});
 </script>
 </body>
 </html>
