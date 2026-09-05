@@ -1,13 +1,20 @@
 {
   "name": "peoplepay360-frontend",
+  "private": true,
   "version": "1.0.0",
-  "description": "Minimal frontend for PeoplePay360 demo using native ES modules",
+  "type": "module",
   "scripts": {
-    "dev": "npx serve -l 3000 ."
+    "dev": "vite --port 3000",
+    "build": "vite build",
+    "preview": "vite preview"
   },
-  "author": "",
-  "license": "MIT",
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
   "devDependencies": {
-    "serve": "^14.2.0"
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.0"
   }
 }
