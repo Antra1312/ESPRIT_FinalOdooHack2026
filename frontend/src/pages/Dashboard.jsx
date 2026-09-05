@@ -71,7 +71,10 @@ export default function Dashboard(){
     if(deptBreakdown[d]) deptBreakdown[d].total+=p.net;
   });
 
-  const avgRemaining=Math.round(DB.allocations.filter(a=>a.typeId==='TT1').reduce((s,a)=>s+allocRemaining(a),0)/DB.employees.length);
+  const primaryLeaveType=DB.timeoffTypes.find((type)=>type.requiresAllocation);
+  const avgRemaining=DB.employees.length
+    ? Math.round(DB.allocations.filter(a=>a.typeId===primaryLeaveType?.id).reduce((s,a)=>s+allocRemaining(a),0)/DB.employees.length)
+    : 0;
 
   return (
     <div>

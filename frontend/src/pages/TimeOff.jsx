@@ -11,8 +11,8 @@ export default function TimeOff(){
   const [showReq,setShowReq]=useState(false);
   const [showAlloc,setShowAlloc]=useState(false);
   const [showType,setShowType]=useState(false);
-  const [reqForm,setReqForm]=useState({employeeId:DB.employees[0]?.id||'',typeId:'TT1',from:'',to:'',duration:1,reason:''});
-  const [allocForm,setAllocForm]=useState({employeeId:DB.employees[0]?.id||'',typeId:'TT1',allocated:20});
+  const [reqForm,setReqForm]=useState({employeeId:DB.employees[0]?.id||'',typeId:DB.timeoffTypes[0]?.id||'',from:'',to:'',duration:1,reason:''});
+  const [allocForm,setAllocForm]=useState({employeeId:DB.employees[0]?.id||'',typeId:DB.timeoffTypes[0]?.id||'',allocated:0});
   const [typeForm,setTypeForm]=useState({name:'',unit:'days',requiresAllocation:true});
 
   const createReq=()=>{

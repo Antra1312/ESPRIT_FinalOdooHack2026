@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { DB, periodLabel, fmtMoney, computeSalaryLines, getStructure, uid } from '../data/mockData';
 import { useState } from 'react';
+import { api, loadBootstrap } from '../api';
 
 export default function PayrunDetail(){
   const {id}=useParams();
@@ -10,7 +11,17 @@ export default function PayrunDetail(){
   if(!pr) return <div>Not found</div>;
   const structure=getStructure(pr.structureId);
 
-  const compute=()=>{
+  const compute=async ()=>{
+    if (pr.id.length > 20) {
+      try {
+        await api.computePayrun(pr.id);
+        await loadBootstrap();
+        setTick(x=>x+1);
+      } catch (error) {
+        alert(error.message);
+      }
+      return;
+    }
     const struct=getStructure(pr.structureId);
     pr.payslipIds=[];
     // remove old payslips for this payrun
@@ -34,7 +45,17 @@ export default function PayrunDetail(){
     setTick(x=>x+1);
   };
 
-  const validate=()=>{
+  const validate=async ()=>{
+    if (pr.id.length > 20) {
+      try {
+        await api.validatePayrun(pr.id);
+        await loadBootstrap();
+        setTick(x=>x+1);
+      } catch (error) {
+        alert(error.message);
+      }
+      return;
+    }
     const warnings=[];
     (pr.payslipIds||[]).forEach(pid=>{
       const ps=DB.payslips.find(p=>p.id===pid); const emp=DB.employees.find(e=>e.id===ps.employeeId);
@@ -50,13 +71,33 @@ export default function PayrunDetail(){
     setTick(x=>x+1);
   };
 
-  const markPaid=()=>{
+  const markPaid=async ()=>{
+    if (pr.id.length > 20) {
+      try {
+        await api.payPayrun(pr.id);
+        await loadBootstrap();
+        setTick(x=>x+1);
+      } catch (error) {
+        alert(error.message);
+      }
+      return;
+    }
     if(pr.warnings?.length && !confirm(`${pr.warnings.length} warning(s) found. Mark as paid anyway?`)) return;
     pr.status='Paid';
     (pr.payslipIds||[]).forEach(pid=>{ const p=DB.payslips.find(x=>x.id===pid); if(p) p.status='Paid'; });
     setTick(x=>x+1);
   };
-  const send=()=>{
+  const send=async ()=>{
+    if (pr.id.length > 20) {
+      try {
+        await api.sendPayrun(pr.id);
+        pr.sent=true;
+        setTick(x=>x+1);
+      } catch (error) {
+        alert(error.message);
+      }
+      return;
+    }
     (pr.payslipIds||[]).forEach(pid=>{ const p=DB.payslips.find(x=>x.id===pid); if(p) p.sent=true; });
     pr.sent=true; setTick(x=>x+1);
   };
