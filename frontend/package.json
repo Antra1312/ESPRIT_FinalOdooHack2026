@@ -1,0 +1,13 @@
+{
+  "name": "peoplepay360-frontend",
+  "version": "1.0.0",
+  "description": "Minimal frontend for PeoplePay360 demo using native ES modules",
+  "scripts": {
+    "dev": "npx serve -l 3000 ."
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}
