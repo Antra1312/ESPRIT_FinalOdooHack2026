@@ -1,4 +1,5 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { loadBootstrap } from '../api';
 
 const ROLES = {
   employee:{label:'Employee',color:'#4C7EA8'},
@@ -15,11 +16,30 @@ export { ROLES };
 
 export function AuthProvider({children}){
   const [user,setUser]=useState(null);
+  const [dataReady,setDataReady]=useState(false);
+  const [dataError,setDataError]=useState('');
+  const [roleDemoUsers,setRoleDemoUsers]=useState(ROLE_USER);
+  useEffect(() => {
+    loadBootstrap()
+      .then((data) => {
+        const backendRoleUsers = Object.fromEntries(
+          Object.entries(data.roleDemoUsers || {}).filter(([, employeeId]) => employeeId)
+        );
+        setRoleDemoUsers({ ...ROLE_USER, ...backendRoleUsers });
+        setDataReady(true);
+      })
+      .catch((error) => {
+        setDataError(error.message);
+        setDataReady(true);
+      });
+  }, []);
   const login=(role)=>{
-    const empId=ROLE_USER[role];
+    const empId=roleDemoUsers[role];
     setUser({role, empId, name: role});
   };
   const logout=()=>setUser(null);
   const can=(...roles)=> user && roles.includes(user.role);
-  return <AuthContext.Provider value={{user,login,logout,can,ROLES}}>{children}</AuthContext.Provider>;
+  if (!dataReady) return <div style={{ padding: 40 }}>Loading data…</div>;
+  if (dataError) return <div style={{ padding: 40 }}>Unable to load backend data: {dataError}</div>;
+  return <AuthContext.Provider value={{user,login,logout,can,ROLES,dataReady,dataError,roleDemoUsers}}>{children}</AuthContext.Provider>;
 }

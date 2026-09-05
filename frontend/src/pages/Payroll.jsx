@@ -1,28 +1,43 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DB, periodLabel, uid, computeSalaryLines, pickContractForPeriod, getStructure, fmtMoney } from '../data/mockData';
+import { DB, periodLabel, pickContractForPeriod, getStructure } from '../data/mockData';
+import { api, loadBootstrap } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 export default function Payroll(){
   const nav=useNavigate();
+  const {user}=useAuth();
   const [showWizard,setShowWizard]=useState(false);
   const [wizardStep,setWizardStep]=useState(1);
-  const [wizardStructure,setWizardStructure]=useState('st_regular');
-  const [wizardPeriod,setWizardPeriod]=useState('2026-09');
+  const [wizardStructure,setWizardStructure]=useState(DB.structures[0]?.id||'');
+  const [wizardPeriod,setWizardPeriod]=useState(new Date().toISOString().slice(0,7));
   const [wizardEmployees,setWizardEmployees]=useState([]);
 
-  const createPayrun=()=>{
+  const createPayrun=async ()=>{
     const ids=[...wizardEmployees];
     if(ids.length===0) return alert('Select at least one employee');
-    const pr={id:uid('PR'),name:`${periodLabel(wizardPeriod)} — ${getStructure(wizardStructure).name}`,structureId:wizardStructure,period:wizardPeriod,employeeIds:ids,status:'Draft',warnings:[],sent:false,createdDate:wizardPeriod+'-01',payslipIds:[]};
-    DB.payruns.push(pr);
-    setShowWizard(false);
-    nav(`/payroll/${pr.id}`);
+    const [year, month] = wizardPeriod.split('-').map(Number);
+    try {
+      const pr=await api.createPayrun({
+        name:`${periodLabel(wizardPeriod)} — ${getStructure(wizardStructure).name}`,
+        salaryStructureId:wizardStructure,
+        periodStart:`${wizardPeriod}-01`,
+        periodEnd:new Date(Date.UTC(year, month, 0)).toISOString().slice(0,10),
+        employeeIds:ids,
+        createdById:user.empId,
+      });
+      await loadBootstrap();
+      setShowWizard(false);
+      nav(`/payroll/${pr.id}`);
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   return (
     <div>
       <div className="pageHead"><div><h1>Payroll — Payruns</h1><div className="desc">Two-step wizard: Step 1 picks Structure + Period, Step 2 selects employees. Payrun created only after Step 2.</div></div>
-        <button className="btn solid" onClick={()=>{setShowWizard(true); setWizardStep(1); setWizardEmployees([...new Set(DB.contracts.map(c=>c.employeeId))]);}}>+ New Payrun</button>
+        <button className="btn solid" onClick={()=>{setShowWizard(true); setWizardStep(1); setWizardStructure(DB.structures[0]?.id||''); setWizardEmployees([...new Set(DB.contracts.map(c=>c.employeeId))]);}}>+ New Payrun</button>
       </div>
       <div className="card"><div className="tableWrap"><table>
         <thead><tr><th>Payrun</th><th>Period</th><th>Structure</th><th>Status</th><th>Payslips</th></tr></thead>

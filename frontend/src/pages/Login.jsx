@@ -1,16 +1,17 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { DB } from '../data/mockData';
 
 const ROLES = [
-  {key:'employee',label:'Employee',sub:'Antra Gajjar',icon:'👨‍💻'},
-  {key:'hr_manager',label:'HR Manager',sub:'Karan Patel',icon:'👩‍💼'},
-  {key:'hr_payroll_user',label:'HR Payroll User',sub:'Meera Iyer',icon:'💰'},
-  {key:'hr_payroll_manager',label:'Payroll Manager',sub:'Rahul Sharma',icon:'🧑‍💼'},
+  {key:'employee',label:'Employee',icon:'👨‍💻'},
+  {key:'hr_manager',label:'HR Manager',icon:'👩‍💼'},
+  {key:'hr_payroll_user',label:'HR Payroll User',icon:'💰'},
+  {key:'hr_payroll_manager',label:'Payroll Manager',icon:'🧑‍💼'},
   {key:'admin',label:'Admin',sub:'Full access',icon:'👑'},
 ];
 
 export default function Login(){
-  const {login}=useAuth();
+  const {login,roleDemoUsers}=useAuth();
   const nav=useNavigate();
   const doLogin=(role)=>{
     login(role);
@@ -28,18 +29,18 @@ export default function Login(){
               <span>👤 Employees</span><span>📄 Contracts</span><span>🕐 Attendance</span><span>🏖️ Time Off</span><span>💰 Payroll</span><span>📃 Payslips</span><span>📊 Dashboard</span>
             </div>
           </div>
-          <div style={{fontSize:12,color:'#93A7BA'}}>Demo build · in-memory data · resets on reload</div>
+          <div style={{fontSize:12,color:'#93A7BA'}}>Connected to the PeoplePay360 backend</div>
         </div>
         <div className="loginRight">
           <h2>Welcome back</h2>
           <div className="sub">Sign in to the HR portal. Any email/password works in this demo.</div>
-          <div className="field"><label>Work email</label><input defaultValue="antra.gajjar@peoplepay360.com" /></div>
-          <div className="field"><label>Password</label><input type="password" defaultValue="demo1234" /></div>
+          <div className="field"><label>Work email</label><input defaultValue={DB.employees.find((employee)=>employee.id===roleDemoUsers.employee)?.email || ''} /></div>
+          <div className="field"><label>Password</label><input type="password" /></div>
           <button className="btnPrimary" onClick={()=>doLogin('admin')}>Sign in as Admin</button>
           <div className="demoNote">👉 Or jump straight into a role to explore permissions:</div>
           <div className="roleGrid">
             {ROLES.map(r=>(
-              <button key={r.key} className="roleChip" onClick={()=>doLogin(r.key)}>{r.icon} {r.label}<span className="d">{r.sub}</span></button>
+              <button key={r.key} className="roleChip" onClick={()=>doLogin(r.key)}>{r.icon} {r.label}<span className="d">{r.sub || DB.employees.find((employee)=>employee.id===roleDemoUsers[r.key])?.name || 'Backend user'}</span></button>
             ))}
           </div>
         </div>
