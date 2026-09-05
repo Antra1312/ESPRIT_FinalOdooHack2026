@@ -1,22 +1,23 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { DB, fmtDate, getAlloc, allocRemaining, initials, getSchedule, weeklyHours, workedHours } from '../data/mockData';
+import { DB, fmtDate, getAlloc, allocRemaining, initials, getSchedule, weeklyHours, workedHours, isContractActive } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 
 export default function EmployeeDetail(){
   const {id}=useParams();
   const nav=useNavigate();
-  const {user}=useAuth();
+  const {user, can}=useAuth();
   const [tab,setTab]=useState('overview');
   const emp=DB.employees.find(e=>e.id===id);
   if(!emp) return <div>Not found</div>;
-  const contracts=DB.contracts.filter(c=>c.employeeId===emp.id).sort((a,b)=>new Date(a.startDate)-new Date(b.startDate));
+  const contracts=DB.contracts.filter(c=>c.employeeId===emp.id).sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
   const att=DB.attendance.filter(a=>a.employeeId===emp.id);
   const reqs=DB.requests.filter(r=>r.employeeId===emp.id);
   const allocs=DB.allocations.filter(a=>a.employeeId===emp.id);
   const mgr=DB.employees.find(e=>e.id===emp.managerId);
   const sched=getSchedule(emp.scheduleId);
   const isSelf=user.role==='employee';
+  const isHR=can('hr_manager', 'hr_payroll_user', 'hr_payroll_manager', 'admin');
 
   return (
     <div>
@@ -67,12 +68,52 @@ export default function EmployeeDetail(){
         </div>
       )}
       {tab==='contracts' && (
-        <div className="card"><div className="tableWrap"><table>
-          <thead><tr><th>Position</th><th>Wage</th><th>Period</th><th>Status</th></tr></thead>
-          <tbody>{contracts.map(c=>(
-            <tr key={c.id}><td>{c.position}</td><td>₹{c.wage.toLocaleString()}</td><td>{fmtDate(c.startDate)} — {c.endDate?fmtDate(c.endDate):'Present'}</td><td><span className="pill blue">{DB.structures.find(s=>s.id===c.structureId)?.name}</span></td></tr>
-          ))}</tbody>
-        </table></div></div>
+        <div className="card">
+          <div className="cardHead">
+            <h3>Contract History ({contracts.length})</h3>
+            {isHR && (
+              <Link to={`/contracts?employee=${emp.id}`} className="btn small solid">
+                Manage / + New Contract
+              </Link>
+            )}
+          </div>
+          <div className="tableWrap"><table>
+            <thead>
+              <tr>
+                <th>Position</th>
+                <th>Department</th>
+                <th>Monthly Wage</th>
+                <th>Salary Structure</th>
+                <th>Contract Period</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {contracts.length > 0 ? contracts.map(c => {
+                const active = isContractActive(c);
+                const structure = DB.structures.find(s => s.id === c.structureId);
+                return (
+                  <tr key={c.id} style={active ? { background: '#F0FBFA' } : {}}>
+                    <td><b>{c.position}</b></td>
+                    <td>{c.dept}</td>
+                    <td><b>₹{c.wage.toLocaleString()}</b></td>
+                    <td><span className="pill blue">{structure?.name || c.structureId}</span></td>
+                    <td>{fmtDate(c.startDate)} — {c.endDate ? fmtDate(c.endDate) : <span style={{ color: 'var(--success)', fontWeight: 600 }}>Ongoing</span>}</td>
+                    <td>
+                      <span className={`pill ${active ? 'green' : 'gray'}`}>
+                        {active ? 'Active' : 'Ended'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              }) : (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: 20 }}>No contracts recorded</td>
+                </tr>
+              )}
+            </tbody>
+          </table></div>
+        </div>
       )}
       {tab==='attendance' && (
         <div className="card"><div className="tableWrap"><table>
