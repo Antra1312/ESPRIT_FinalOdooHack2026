@@ -1,0 +1,36 @@
+:root{
+  --bg:#F3F5FA;
+  --surface:#FFFFFF;
+  --surface-alt:#EBEFF8;
+  --ink:#121826;
+  --ink-dim:#5C6478;
+  --ink-faint:#94A0B8;
+  --primary:#123A5E;
+  --primary-dark:#0B2740;
+  --accent:#0EA5A0;
+  --accent-dark:#0A8480;
+  --success:#1E9E5A;
+  --success-bg:#E4F7EC;
+  --warning:#C77D14;
+  --warning-bg:#FCF0DD;
+  --danger:#C1373B;
+  --danger-bg:#FBE7E8;
+  --border:#E2E6F0;
+  --shadow:0 1px 2px rgba(18,24,38,.04), 0 8px 24px -12px rgba(18,24,38,.12);
+  --radius:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'Inter',system-ui,sans-serif;
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:'Sora',system-ui,sans-serif}
+a{color:var(--accent-dark);text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:14px}
+::selection{background:#BFE9E7}
