@@ -1,0 +1,4 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '../api';
+export default function ForgotPassword(){ const [email,setEmail]=useState(''); const [message,setMessage]=useState(''); const submit=async(e)=>{e.preventDefault();try{setMessage((await api.forgotPassword(email)).message)}catch(err){setMessage(err.message)}}; return <div id="loginScreen"><div className="loginCard"><div className="loginRight" style={{margin:'auto',maxWidth:480}}><h2>Reset password</h2><p className="sub">Enter your work email. A reset link expires in 15 minutes.</p><form onSubmit={submit}><div className="field"><label>Work email</label><input required type="email" value={email} onChange={e=>setEmail(e.target.value)}/></div><button className="btnPrimary">Send reset link</button></form>{message&&<p className="hint">{message}</p>}<Link to="/login">Back to sign in</Link></div></div></div> }

@@ -14,7 +14,9 @@ export default function Employees(){
   const [editId,setEditId]=useState(null);
   const [form,setForm]=useState({name:'',dept:'',position:'',managerId:'',scheduleId:'',status:'Active',employeeType:'Full-time',email:'',phone:''});
   const list=DB.employees.filter(e=> e.name.toLowerCase().includes(q.toLowerCase()) || e.position.toLowerCase().includes(q.toLowerCase()));
-  const depts=DB.departments.map((department)=>department.name);
+  // Build columns from actual employee records. This avoids rendering empty
+  // departments and keeps newly registered, unassigned employees visible.
+  const depts=[...new Set(list.map((employee)=>employee.dept || 'Unassigned'))];
   const isHR=['hr_manager','hr_payroll_user','hr_payroll_manager','admin'].includes(user.role);
 
   if(user.role==='employee'){

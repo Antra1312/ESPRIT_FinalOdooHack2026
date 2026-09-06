@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
 import EmployeeDetail from './pages/EmployeeDetail';
@@ -28,6 +30,8 @@ function AppRoutes(){
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to={user.role==='employee'?'/employees':'/payroll-dashboard'} replace/> : <Login/>} />
+      <Route path="/forgot-password" element={<ForgotPassword/>} />
+      <Route path="/reset-password" element={<ResetPassword/>} />
       <Route path="/payroll-dashboard" element={<Protected roles={['hr_manager','hr_payroll_user','hr_payroll_manager','admin']}><Layout><Dashboard/></Layout></Protected>} />
       <Route path="/reports" element={<Navigate to="/payroll-dashboard" replace/>} />
       <Route path="/dashboard" element={<Navigate to="/payroll-dashboard" replace/>} />

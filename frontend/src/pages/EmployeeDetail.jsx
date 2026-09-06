@@ -2,12 +2,17 @@ import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { DB, fmtDate, getAlloc, allocRemaining, initials, getSchedule, weeklyHours, workedHours } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
+import { api, loadBootstrap } from '../api';
 
 export default function EmployeeDetail(){
   const {id}=useParams();
   const nav=useNavigate();
   const {user}=useAuth();
   const [tab,setTab]=useState('overview');
+  const [showEdit,setShowEdit]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [tick,setTick]=useState(0);
+  const [form,setForm]=useState({});
   const emp=DB.employees.find(e=>e.id===id);
   if(!emp) return <div>Not found</div>;
   const contracts=DB.contracts.filter(c=>c.employeeId===emp.id).sort((a,b)=>new Date(a.startDate)-new Date(b.startDate));
@@ -17,6 +22,23 @@ export default function EmployeeDetail(){
   const mgr=DB.employees.find(e=>e.id===emp.managerId);
   const sched=getSchedule(emp.scheduleId);
   const isSelf=user.role==='employee';
+  const canEdit=['admin','hr_payroll_manager'].includes(user.role);
+  const openEdit=()=>{
+    setForm({ name:emp.name || '', email:emp.email || '', phone:emp.phone || '', dept:emp.dept === 'Unassigned' ? '' : (emp.dept || ''), position:emp.position === '—' ? '' : (emp.position || ''), employeeType:emp.employeeType || 'Full Time', managerId:emp.managerId || '', scheduleId:emp.scheduleId || '', status:emp.status || 'Active', bankAccount:emp.bankAccount || '', bankName:emp.bankName || '', pan:emp.pan || '' });
+    setShowEdit(true);
+  };
+  const save=async()=>{
+    if(!form.name.trim()) return alert('Employee name is required');
+    if(form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return alert('Enter a valid email address');
+    setSaving(true);
+    try {
+      await api.updateEmployee(emp.id,form);
+      await loadBootstrap();
+      setShowEdit(false);
+      setTick(value=>value+1);
+    } catch(error) { alert(error.message); }
+    finally { setSaving(false); }
+  };
 
   return (
     <div>
@@ -27,6 +49,7 @@ export default function EmployeeDetail(){
           <div><h1 style={{marginBottom:2}}>{emp.name}</h1><div className="desc">{emp.position} · {emp.dept} · {emp.employeeType} · Reports to {mgr?mgr.name:'—'} · <span className={`pill ${emp.status==='Active'?'green':'gray'}`} style={{marginLeft:6}}>{emp.status}</span></div>
             <div className="hint">Schedule: {sched?`${sched.name} — ${weeklyHours(sched)}h/week (${sched.type})`:'—'}</div></div>
         </div>
+        {canEdit && <button className="btn solid" onClick={openEdit}>Edit employee</button>}
       </div>
       <div className="smartBtns">
         <button className="smartBtn" onClick={()=>nav(`/contracts?employee=${emp.id}`)}><div className="n">{contracts.length}</div><div className="l">📄 Contracts — filtered view →</div></button>
@@ -91,6 +114,27 @@ export default function EmployeeDetail(){
             return <tr key={r.id}><td>{t.name}</td><td>{fmtDate(r.from)} → {fmtDate(r.to)}</td><td>{r.duration}</td><td><span className={`pill ${r.status==='Approved'?'green':r.status==='Pending'?'amber':'red'}`}>{r.status}</span></td></tr>;
           }): <tr><td colSpan={4} style={{textAlign:'center',padding:20}}>No requests</td></tr>}</tbody>
         </table></div></div>
+      )}
+      {showEdit && (
+        <div className="modalOverlay" onMouseDown={event=>{if(event.target===event.currentTarget) setShowEdit(false);}}>
+          <div className="modal"><div className="modalHead"><h3>Edit employee details</h3><button className="modalClose" onClick={()=>setShowEdit(false)}>×</button></div>
+            <div className="modalBody"><div className="formGrid">
+              <div className="field"><label>Name</label><input value={form.name} onChange={event=>setForm({...form,name:event.target.value})} /></div>
+              <div className="field"><label>Work email</label><input type="email" value={form.email} onChange={event=>setForm({...form,email:event.target.value})} /></div>
+              <div className="field"><label>Phone</label><input value={form.phone} onChange={event=>setForm({...form,phone:event.target.value})} /></div>
+              <div className="field"><label>Department</label><select value={form.dept} onChange={event=>setForm({...form,dept:event.target.value})}><option value="">— Unassigned</option>{DB.departments.map(item=><option key={item.id} value={item.name}>{item.name}</option>)}</select></div>
+              <div className="field"><label>Position</label><select value={form.position} onChange={event=>setForm({...form,position:event.target.value})}><option value="">— Unassigned</option>{DB.jobPositions.map(item=><option key={item.id} value={item.title}>{item.title}</option>)}</select></div>
+              <div className="field"><label>Employment type</label><select value={form.employeeType} onChange={event=>setForm({...form,employeeType:event.target.value})}><option value="Full Time">Full Time</option><option value="Part Time">Part Time</option><option value="Contract">Contract</option><option value="Intern">Intern</option></select></div>
+              <div className="field"><label>Manager</label><select value={form.managerId} onChange={event=>setForm({...form,managerId:event.target.value})}><option value="">— None</option>{DB.employees.filter(item=>item.id!==emp.id).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+              <div className="field"><label>Working schedule</label><select value={form.scheduleId} onChange={event=>setForm({...form,scheduleId:event.target.value})}><option value="">— None</option>{DB.schedules.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+              <div className="field"><label>Status</label><select value={form.status} onChange={event=>setForm({...form,status:event.target.value})}><option>Active</option><option>On Leave</option><option>Probation</option><option>Inactive</option></select></div>
+              <div className="field"><label>Bank account number</label><input value={form.bankAccount} onChange={event=>setForm({...form,bankAccount:event.target.value})} /></div>
+              <div className="field"><label>Bank name</label><input value={form.bankName} onChange={event=>setForm({...form,bankName:event.target.value})} /></div>
+              <div className="field"><label>PAN</label><input value={form.pan} onChange={event=>setForm({...form,pan:event.target.value.toUpperCase()})} /></div>
+            </div></div>
+            <div className="modalFoot"><button className="btn" onClick={()=>setShowEdit(false)}>Cancel</button><button className="btn solid" disabled={saving} onClick={save}>{saving?'Saving…':'Save changes'}</button></div>
+          </div>
+        </div>
       )}
     </div>
   );

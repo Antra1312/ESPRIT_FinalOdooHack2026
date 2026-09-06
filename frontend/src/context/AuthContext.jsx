@@ -15,7 +15,7 @@ export const useAuth = () => useContext(AuthContext);
 export { ROLES };
 
 export function AuthProvider({children}){
-  const [user,setUser]=useState(null);
+  const [user,setUser]=useState(()=>{ try { return JSON.parse(localStorage.getItem('peoplepay360_session')); } catch { return null; } });
   const [dataReady,setDataReady]=useState(false);
   const [dataError,setDataError]=useState('');
   const [roleDemoUsers,setRoleDemoUsers]=useState(ROLE_USER);
@@ -33,11 +33,13 @@ export function AuthProvider({children}){
         setDataReady(true);
       });
   }, []);
-  const login=(role)=>{
-    const empId=roleDemoUsers[role];
-    setUser({role, empId, name: role});
+  const login=(session)=>{
+    const role=session.user.role.toLowerCase();
+    const user={role,empId:session.user.employeeId,name:session.user.email,email:session.user.email,token:session.token};
+    localStorage.setItem('peoplepay360_session',JSON.stringify(user));
+    setUser(user);
   };
-  const logout=()=>setUser(null);
+  const logout=()=>{ localStorage.removeItem('peoplepay360_session'); setUser(null); };
   const can=(...roles)=> user && roles.includes(user.role);
   if (!dataReady) return <div style={{ padding: 40 }}>Loading data…</div>;
   if (dataError) return <div style={{ padding: 40 }}>Unable to load backend data: {dataError}</div>;
