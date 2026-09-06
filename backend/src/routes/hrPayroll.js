@@ -67,25 +67,35 @@ router.get('/employees/:id', async (req, res) => {
 
 router.post('/employees', async (req, res) => {
   try {
+    const input = req.body || {};
+    const [firstName, ...lastNameParts] = String(input.name || `${input.firstName || ''} ${input.lastName || ''}`).trim().split(/\s+/);
+    if (!firstName || !(input.email || input.workEmail)) return res.status(400).json({ message: 'Name and work email are required' });
+    const departmentValue = input.dept || input.departmentId;
+    const positionValue = input.position || input.jobPositionId;
+    const department = departmentValue ? await prismaClient.department.findFirst({ where: { OR: [{ id: departmentValue }, { name: { equals: departmentValue, mode: 'insensitive' } }, { code: { equals: departmentValue, mode: 'insensitive' } }] } }) : null;
+    const jobPosition = positionValue ? await prismaClient.jobPosition.findFirst({ where: { OR: [{ id: positionValue }, { title: { equals: positionValue, mode: 'insensitive' } }] } }) : null;
+    const typeMap = { 'Full-time': 'FULL_TIME', 'Full Time': 'FULL_TIME', 'Part-time': 'PART_TIME', 'Part Time': 'PART_TIME', Contract: 'CONTRACT', Intern: 'INTERN' };
+    const statusMap = { Active: 'ACTIVE', Inactive: 'TERMINATED', 'On Leave': 'ON_LEAVE', Probation: 'PROBATION' };
     const employee = await prismaClient.employee.create({
       data: {
         employeeCode: `EMP-${Date.now()}`,
-        firstName: req.body.firstName,
-        lastName: req.body.lastName,
-        workEmail: req.body.workEmail,
-        personalEmail: req.body.personalEmail,
-        phone: req.body.phone,
-        dateOfBirth: req.body.dateOfBirth,
-        gender: req.body.gender,
-        employmentType: req.body.employmentType || 'FULL_TIME',
-        status: req.body.status || 'ACTIVE',
-        departmentId: req.body.departmentId,
-        jobPositionId: req.body.jobPositionId,
-        managerId: req.body.managerId,
-        workingScheduleId: req.body.workingScheduleId,
-        bankAccountNumber: req.body.bankAccountNumber,
-        bankName: req.body.bankName,
-        taxIdentifier: req.body.taxIdentifier,
+        firstName,
+        lastName: lastNameParts.join(' ') || firstName,
+        workEmail: input.email || input.workEmail,
+        personalEmail: input.personalEmail || null,
+        phone: input.phone || null,
+        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
+        gender: input.gender || null,
+        joiningDate: input.joiningDate ? new Date(input.joiningDate) : new Date(),
+        employmentType: typeMap[input.employeeType] || input.employmentType || 'FULL_TIME',
+        status: statusMap[input.status] || input.status || 'ACTIVE',
+        departmentId: department?.id || null,
+        jobPositionId: jobPosition?.id || null,
+        managerId: input.managerId || null,
+        workingScheduleId: input.scheduleId || input.workingScheduleId || null,
+        bankAccountNumber: input.bankAccount || input.bankAccountNumber || null,
+        bankName: input.bankName || null,
+        taxIdentifier: input.pan || input.taxIdentifier || null,
         // user will be created separately or linked later
       },
       include: {
@@ -106,9 +116,29 @@ router.post('/employees', async (req, res) => {
 
 router.put('/employees/:id', async (req, res) => {
   try {
+    const input = req.body || {};
+    const [firstName, ...lastNameParts] = String(input.name || '').trim().split(/\s+/);
+    const department = input.dept ? await prismaClient.department.findFirst({ where: { OR: [{ name: { equals: input.dept, mode: 'insensitive' } }, { code: { equals: input.dept, mode: 'insensitive' } }] } }) : null;
+    const jobPosition = input.position ? await prismaClient.jobPosition.findFirst({ where: { title: { equals: input.position, mode: 'insensitive' } } }) : null;
+    const statusMap = { Active: 'ACTIVE', Inactive: 'TERMINATED', 'On Leave': 'ON_LEAVE', Probation: 'PROBATION' };
+    const typeMap = { 'Full-time': 'FULL_TIME', 'Full Time': 'FULL_TIME', 'Part-time': 'PART_TIME', 'Part Time': 'PART_TIME', Contract: 'CONTRACT', Intern: 'INTERN', Temporary: 'TEMPORARY' };
+    const data = {
+      ...(firstName && { firstName, lastName: lastNameParts.join(' ') || firstName }),
+      ...(input.email && { workEmail: input.email }),
+      ...(input.phone !== undefined && { phone: input.phone || null }),
+      ...(input.dept !== undefined && { departmentId: department?.id || null }),
+      ...(input.position !== undefined && { jobPositionId: jobPosition?.id || null }),
+      ...(input.managerId !== undefined && { managerId: input.managerId || null }),
+      ...(input.scheduleId !== undefined && { workingScheduleId: input.scheduleId || null }),
+      ...(input.status && { status: statusMap[input.status] || input.status }),
+      ...(input.employeeType && { employmentType: typeMap[input.employeeType] || input.employeeType }),
+      ...(input.bankAccount !== undefined && { bankAccountNumber: input.bankAccount || null }),
+      ...(input.bankName !== undefined && { bankName: input.bankName || null }),
+      ...(input.pan !== undefined && { taxIdentifier: input.pan || null }),
+    };
     const employee = await prismaClient.employee.update({
       where: { id: req.params.id },
-      data: { ...req.body },
+      data,
     });
     res.json(employee);
   } catch (error) {
