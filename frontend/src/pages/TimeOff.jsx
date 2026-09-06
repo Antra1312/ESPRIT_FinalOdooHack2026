@@ -2,23 +2,29 @@ import { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { DB, fmtDate, allocRemaining, uid } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
+import SearchableSelect from '../components/SearchableSelect';
+import { api, loadBootstrap } from '../api';
 
 export default function TimeOff(){
   const {user}=useAuth();
+  const isEmployee=user.role==='employee';
   const canManage=['hr_manager','hr_payroll_user','hr_payroll_manager','admin'].includes(user.role);
   const [tab,setTab]=useState('requests');
   const [tick,setTick]=useState(0);
   const [showReq,setShowReq]=useState(false);
   const [showAlloc,setShowAlloc]=useState(false);
   const [showType,setShowType]=useState(false);
-  const [reqForm,setReqForm]=useState({employeeId:DB.employees[0]?.id||'',typeId:DB.timeoffTypes[0]?.id||'',from:'',to:'',duration:1,reason:''});
+  const [reqForm,setReqForm]=useState({employeeId:user.empId||DB.employees[0]?.id||'',typeId:DB.timeoffTypes[0]?.id||'',from:'',to:'',duration:1,reason:''});
   const [allocForm,setAllocForm]=useState({employeeId:DB.employees[0]?.id||'',typeId:DB.timeoffTypes[0]?.id||'',allocated:0});
   const [typeForm,setTypeForm]=useState({name:'',unit:'days',requiresAllocation:true});
 
-  const createReq=()=>{
+  const createReq=async ()=>{
     if(!reqForm.from||!reqForm.to) return alert('Dates required');
-    DB.requests.push({id:uid('RQ'),employeeId:reqForm.employeeId,typeId:reqForm.typeId,from:reqForm.from,to:reqForm.to,duration:Number(reqForm.duration),status:'Pending',reason:reqForm.reason});
-    setShowReq(false); setTick(x=>x+1);
+    try {
+      await api.createTimeOffRequest({ employeeId:isEmployee?user.empId:reqForm.employeeId, timeOffTypeId:reqForm.typeId, startDate:reqForm.from, endDate:reqForm.to, requestedAmount:Number(reqForm.duration), reason:reqForm.reason });
+      await loadBootstrap();
+      setShowReq(false); setTick(x=>x+1);
+    } catch(error) { alert(error.message); }
   };
   const createAlloc=()=>{
     DB.allocations.push({id:uid('AL'),employeeId:allocForm.employeeId,typeId:allocForm.typeId,allocated:Number(allocForm.allocated),used:0,validFrom:'2026-01-01',validTo:'2026-12-31',status:'Approved'});
@@ -88,7 +94,7 @@ export default function TimeOff(){
           <div className="modal"><div className="modalHead"><h3>New Time Off Request</h3><button className="modalClose" onClick={()=>setShowReq(false)}>×</button></div>
             <div className="modalBody">
               <div className="formGrid">
-                <div className="field"><label>Employee</label><select value={reqForm.employeeId} onChange={e=>setReqForm({...reqForm,employeeId:e.target.value})}>{DB.employees.map(emp=><option key={emp.id} value={emp.id}>{emp.name}</option>)}</select></div>
+                {isEmployee ? <div className="field"><label>Employee</label><input value="My account" disabled /></div> : <div className="field"><label>Employee</label><SearchableSelect value={reqForm.employeeId} onChange={employeeId=>setReqForm({...reqForm,employeeId})} options={DB.employees.map(employee=>({value:employee.id,label:`${employee.name} — ${employee.email}`}))} /></div>}
                 <div className="field"><label>Type</label><select value={reqForm.typeId} onChange={e=>setReqForm({...reqForm,typeId:e.target.value})}>{DB.timeoffTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
                 <div className="field"><label>From</label><input type="date" value={reqForm.from} onChange={e=>setReqForm({...reqForm,from:e.target.value})} /></div>
                 <div className="field"><label>To</label><input type="date" value={reqForm.to} onChange={e=>setReqForm({...reqForm,to:e.target.value})} /></div>
@@ -105,7 +111,7 @@ export default function TimeOff(){
           <div className="modal"><div className="modalHead"><h3>New Allocation</h3><button className="modalClose" onClick={()=>setShowAlloc(false)}>×</button></div>
             <div className="modalBody">
               <div className="formGrid">
-                <div className="field"><label>Employee</label><select value={allocForm.employeeId} onChange={e=>setAllocForm({...allocForm,employeeId:e.target.value})}>{DB.employees.map(emp=><option key={emp.id} value={emp.id}>{emp.name}</option>)}</select></div>
+                <div className="field"><label>Employee</label><SearchableSelect value={allocForm.employeeId} onChange={employeeId=>setAllocForm({...allocForm,employeeId})} options={DB.employees.map(employee=>({value:employee.id,label:`${employee.name} — ${employee.email}`}))} /></div>
                 <div className="field"><label>Type</label><select value={allocForm.typeId} onChange={e=>setAllocForm({...allocForm,typeId:e.target.value})}>{DB.timeoffTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
                 <div className="field"><label>Allocated days</label><input type="number" value={allocForm.allocated} onChange={e=>setAllocForm({...allocForm,allocated:e.target.value})} /></div>
               </div>

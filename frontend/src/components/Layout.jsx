@@ -10,7 +10,7 @@ const NAV = [
   {to:'/attendance',label:'Attendance',roles:['employee','hr_manager','hr_payroll_user','hr_payroll_manager','admin']},
   {to:'/timeoff',label:'Time Off',roles:['employee','hr_manager','hr_payroll_user','hr_payroll_manager','admin']},
   {to:'/payroll',label:'Payroll',roles:['hr_payroll_user','hr_payroll_manager','admin']},
-  {to:'/payslips',label:'Payslips',roles:['hr_payroll_user','hr_payroll_manager','admin']},
+  {to:'/payslips',label:'Payslips',roles:['hr_manager','hr_payroll_user','hr_payroll_manager','admin']},
   {to:'/salary-structures',label:'Salary Structures',roles:['hr_payroll_user','hr_payroll_manager','admin']},
   {to:'/salary-rules',label:'Salary Rules',roles:['hr_payroll_user','hr_payroll_manager','admin']},
 ];

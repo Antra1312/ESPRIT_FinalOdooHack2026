@@ -43,8 +43,8 @@ function AppRoutes(){
       <Route path="/timeoff" element={<Protected><Layout><TimeOff/></Layout></Protected>} />
       <Route path="/payroll" element={<Protected roles={['hr_payroll_user','hr_payroll_manager','admin']}><Layout><Payroll/></Layout></Protected>} />
       <Route path="/payroll/:id" element={<Protected roles={['hr_payroll_user','hr_payroll_manager','admin']}><Layout><PayrunDetail/></Layout></Protected>} />
-      <Route path="/payslips" element={<Protected roles={['hr_payroll_user','hr_payroll_manager','admin']}><Layout><Payslips/></Layout></Protected>} />
-      <Route path="/payslips/:id" element={<Protected roles={['hr_payroll_user','hr_payroll_manager','admin']}><Layout><PayslipDetail/></Layout></Protected>} />
+      <Route path="/payslips" element={<Protected roles={['hr_manager','hr_payroll_user','hr_payroll_manager','admin']}><Layout><Payslips/></Layout></Protected>} />
+      <Route path="/payslips/:id" element={<Protected roles={['hr_manager','hr_payroll_user','hr_payroll_manager','admin']}><Layout><PayslipDetail/></Layout></Protected>} />
       <Route path="/salary-structures" element={<Protected roles={['hr_payroll_user','hr_payroll_manager','admin']}><Layout><SalaryStructures/></Layout></Protected>} />
       <Route path="/salary-rules" element={<Protected roles={['hr_payroll_user','hr_payroll_manager','admin']}><Layout><SalaryRules/></Layout></Protected>} />
       <Route path="/" element={<Navigate to="/login" replace/>} />

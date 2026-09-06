@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { DB } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { api, loadBootstrap } from '../api';
+import SearchableSelect from '../components/SearchableSelect';
 
 export default function Employees(){
   const nav=useNavigate();
@@ -31,6 +32,7 @@ export default function Employees(){
     if(!form.name.trim()||!form.position.trim()) return alert('Name and Position required');
     const emailOk=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
     if(form.email && !emailOk) return alert('Invalid email format');
+    if(!editId && DB.employees.some(employee=>employee.email?.toLowerCase()===form.email.trim().toLowerCase())) return alert('An employee profile already exists for this work email. Search for the employee and use Edit instead.');
     const digits=form.phone.replace(/\D/g,'');
     if(form.phone && digits.length!==10) return alert('Phone must be exactly 10 digits');
     const payload={...form, joiningDate: editId ? undefined : new Date().toISOString().slice(0,10)};
@@ -85,13 +87,13 @@ export default function Employees(){
             <div className="modalBody">
               <div className="formGrid">
                 <div className="field"><label>Name</label><input placeholder="e.g. Aarav Mehta" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} /></div>
-                <div className="field"><label>Department</label><select value={form.dept} onChange={e=>setForm({...form,dept:e.target.value})}><option value="">— Select department</option>{DB.departments.map((department)=><option key={department.id} value={department.name}>{department.name}</option>)}</select></div>
-                <div className="field"><label>Position</label><select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option value="">— Select position</option>{DB.jobPositions.map((position)=><option key={position.id} value={position.title}>{position.title}</option>)}</select></div>
+                <div className="field"><label>Department</label><SearchableSelect value={form.dept} onChange={dept=>setForm({...form,dept})} emptyLabel="Unassigned" options={DB.departments.map(department=>({value:department.name,label:`${department.name}${department.code?` — ${department.code}`:''}`}))} /></div>
+                <div className="field"><label>Position</label><SearchableSelect value={form.position} onChange={position=>setForm({...form,position})} emptyLabel="Unassigned" options={DB.jobPositions.map(position=>({value:position.title,label:`${position.title}${position.code?` — ${position.code}`:''}`}))} /></div>
                 <div className="field"><label>Type</label><select value={form.employeeType} onChange={e=>setForm({...form,employeeType:e.target.value})}><option>Full-time</option><option>Contract</option><option>Intern</option><option>Part-time</option></select></div>
                 <div className="field"><label>Email</label><input type="email" placeholder="e.g. aarav.mehta@peoplepay360.com" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
                 <div className="field"><label>Phone</label><input placeholder="e.g. 9820011234" maxLength={10} value={form.phone} onChange={e=>setForm({...form,phone:e.target.value.replace(/\D/g,'').slice(0,10)})} /></div>
-                <div className="field"><label>Manager</label><select value={form.managerId} onChange={e=>setForm({...form,managerId:e.target.value})}><option value="">— None</option>{managerOptions.map(x=><option key={x.id} value={x.id}>{x.name} — {x.position}</option>)}</select></div>
-                <div className="field"><label>Schedule</label><select value={form.scheduleId} onChange={e=>setForm({...form,scheduleId:e.target.value})}>{DB.schedules.map(s=><option key={s.id} value={s.id}>{s.name} — {s.type}</option>)}</select></div>
+                <div className="field"><label>Manager</label><SearchableSelect value={form.managerId} onChange={managerId=>setForm({...form,managerId})} emptyLabel="No manager" options={managerOptions.map(manager=>({value:manager.id,label:`${manager.name} — ${manager.position}`}))} /></div>
+                <div className="field"><label>Schedule</label><SearchableSelect value={form.scheduleId} onChange={scheduleId=>setForm({...form,scheduleId})} options={DB.schedules.map(schedule=>({value:schedule.id,label:`${schedule.name} — ${schedule.type}`}))} /></div>
                 <div className="field"><label>Status</label><select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option>Active</option><option>Inactive</option><option>On Leave</option><option>Probation</option></select></div>
               </div>
             </div>

@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { DB, fmtDate, getAlloc, allocRemaining, initials, getSchedule, weeklyHours, workedHours } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { api, loadBootstrap } from '../api';
+import SearchableSelect from '../components/SearchableSelect';
 
 export default function EmployeeDetail(){
   const {id}=useParams();
@@ -122,11 +123,11 @@ export default function EmployeeDetail(){
               <div className="field"><label>Name</label><input value={form.name} onChange={event=>setForm({...form,name:event.target.value})} /></div>
               <div className="field"><label>Work email</label><input type="email" value={form.email} onChange={event=>setForm({...form,email:event.target.value})} /></div>
               <div className="field"><label>Phone</label><input value={form.phone} onChange={event=>setForm({...form,phone:event.target.value})} /></div>
-              <div className="field"><label>Department</label><select value={form.dept} onChange={event=>setForm({...form,dept:event.target.value})}><option value="">— Unassigned</option>{DB.departments.map(item=><option key={item.id} value={item.name}>{item.name}</option>)}</select></div>
-              <div className="field"><label>Position</label><select value={form.position} onChange={event=>setForm({...form,position:event.target.value})}><option value="">— Unassigned</option>{DB.jobPositions.map(item=><option key={item.id} value={item.title}>{item.title}</option>)}</select></div>
+              <div className="field"><label>Department</label><SearchableSelect value={form.dept} onChange={dept=>setForm({...form,dept})} emptyLabel="Unassigned" options={DB.departments.map(item=>({value:item.name,label:`${item.name}${item.code?` — ${item.code}`:''}`}))} /></div>
+              <div className="field"><label>Position</label><SearchableSelect value={form.position} onChange={position=>setForm({...form,position})} emptyLabel="Unassigned" options={DB.jobPositions.map(item=>({value:item.title,label:`${item.title}${item.code?` — ${item.code}`:''}`}))} /></div>
               <div className="field"><label>Employment type</label><select value={form.employeeType} onChange={event=>setForm({...form,employeeType:event.target.value})}><option value="Full Time">Full Time</option><option value="Part Time">Part Time</option><option value="Contract">Contract</option><option value="Intern">Intern</option></select></div>
-              <div className="field"><label>Manager</label><select value={form.managerId} onChange={event=>setForm({...form,managerId:event.target.value})}><option value="">— None</option>{DB.employees.filter(item=>item.id!==emp.id).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
-              <div className="field"><label>Working schedule</label><select value={form.scheduleId} onChange={event=>setForm({...form,scheduleId:event.target.value})}><option value="">— None</option>{DB.schedules.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+              <div className="field"><label>Manager</label><SearchableSelect value={form.managerId} onChange={managerId=>setForm({...form,managerId})} emptyLabel="No manager" options={DB.employees.filter(item=>item.id!==emp.id).map(item=>({value:item.id,label:`${item.name} — ${item.email}`}))} /></div>
+              <div className="field"><label>Working schedule</label><SearchableSelect value={form.scheduleId} onChange={scheduleId=>setForm({...form,scheduleId})} emptyLabel="No schedule" options={DB.schedules.map(item=>({value:item.id,label:item.name}))} /></div>
               <div className="field"><label>Status</label><select value={form.status} onChange={event=>setForm({...form,status:event.target.value})}><option>Active</option><option>On Leave</option><option>Probation</option><option>Inactive</option></select></div>
               <div className="field"><label>Bank account number</label><input value={form.bankAccount} onChange={event=>setForm({...form,bankAccount:event.target.value})} /></div>
               <div className="field"><label>Bank name</label><input value={form.bankName} onChange={event=>setForm({...form,bankName:event.target.value})} /></div>

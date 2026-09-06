@@ -14,8 +14,9 @@ const initPrisma = (client) => {
 const calculateWorkedHours = (schedule) => {
   if (!schedule || !schedule.lines) return 0;
   return schedule.lines.reduce((sum, line) => {
-    const start = new Date(`1970-01-01T${line.startTime}`);
-    const end = new Date(`1970-01-01T${line.endTime}`);
+    const start = new Date(line.startTime).getTime();
+    const end = new Date(line.endTime).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return sum;
     const breakMs = line.breakMinutes * 60 * 1000;
     return sum + Math.max(0, (end - start - breakMs) / (1000 * 60 * 60));
   }, 0) * 4.33;
@@ -110,6 +111,8 @@ router.post('/employees', async (req, res) => {
     });
     res.status(201).json(employee);
   } catch (error) {
+    if (error.code === 'P2002') return res.status(409).json({ message: 'An employee profile already exists for this work email. Search for the employee and edit the existing profile.' });
+    if (error.code === 'P2003') return res.status(400).json({ message: 'The selected department, position, manager, or schedule is no longer valid. Refresh and try again.' });
     res.status(500).json({ message: error.message });
   }
 });
@@ -290,6 +293,43 @@ router.post('/working-schedules', async (req, res) => {
 // ==========================================
 // TIME OFF ROUTES
 // ==========================================
+const employeeForRequest = (req) => req.user?.employee?.id || req.user?.employeeId;
+const dateTimeFor = (date, time) => new Date(`${date}T${time || '00:00'}:00`);
+
+router.post('/attendance/check-in', async (req, res) => {
+  try {
+    const employeeId = employeeForRequest(req);
+    if (!employeeId) return res.status(400).json({ message: 'Your user account is not linked to an employee profile' });
+    const date = req.body?.date || new Date().toISOString().slice(0, 10);
+    const checkIn = dateTimeFor(date, req.body?.time);
+    if (Number.isNaN(checkIn.getTime())) return res.status(400).json({ message: 'A valid check-in time is required' });
+    const attendanceDate = new Date(`${date}T00:00:00.000Z`);
+    const existing = await prismaClient.attendance.findUnique({ where: { employeeId_attendanceDate: { employeeId, attendanceDate } } });
+    if (existing?.checkIn) return res.status(409).json({ message: 'You have already checked in for this date' });
+    const attendance = existing
+      ? await prismaClient.attendance.update({ where: { id: existing.id }, data: { checkIn, status: 'PRESENT', source: 'EMPLOYEE' } })
+      : await prismaClient.attendance.create({ data: { employeeId, attendanceDate, checkIn, status: 'PRESENT', source: 'EMPLOYEE' } });
+    res.status(existing ? 200 : 201).json(attendance);
+  } catch (error) { res.status(500).json({ message: error.message }); }
+});
+
+router.post('/attendance/check-out', async (req, res) => {
+  try {
+    const employeeId = employeeForRequest(req);
+    if (!employeeId) return res.status(400).json({ message: 'Your user account is not linked to an employee profile' });
+    const date = req.body?.date || new Date().toISOString().slice(0, 10);
+    const checkOut = dateTimeFor(date, req.body?.time);
+    const attendanceDate = new Date(`${date}T00:00:00.000Z`);
+    const existing = await prismaClient.attendance.findUnique({ where: { employeeId_attendanceDate: { employeeId, attendanceDate } } });
+    if (!existing?.checkIn) return res.status(400).json({ message: 'Check in before checking out' });
+    if (existing.checkOut) return res.status(409).json({ message: 'You have already checked out for this date' });
+    if (Number.isNaN(checkOut.getTime()) || checkOut <= existing.checkIn) return res.status(400).json({ message: 'Check-out time must be after check-in time' });
+    const workedMinutes = Math.round((checkOut - existing.checkIn) / 60000);
+    const attendance = await prismaClient.attendance.update({ where: { id: existing.id }, data: { checkOut, workedMinutes, status: 'PRESENT' } });
+    res.json(attendance);
+  } catch (error) { res.status(500).json({ message: error.message }); }
+});
+
 router.get('/time-off/types', async (req, res) => {
   try {
     const types = await prismaClient.timeOffType.findMany({ where: { isActive: true } });
@@ -346,6 +386,7 @@ router.put('/time-allocations/:id/approve', async (req, res) => {
 
 router.get('/employees/:employeeId/time-requests', async (req, res) => {
   try {
+    if (req.user?.role === 'EMPLOYEE' && req.params.employeeId !== employeeForRequest(req)) return res.status(403).json({ message: 'Employees can view only their own time-off requests' });
     const requests = await prismaClient.timeOffRequest.findMany({
       where: { employeeId: req.params.employeeId },
       include: { timeOffType: true },
@@ -359,7 +400,11 @@ router.get('/employees/:employeeId/time-requests', async (req, res) => {
 
 router.post('/time-requests', async (req, res) => {
   try {
-    const { employeeId, timeOffTypeId, allocationId, startDate, endDate, requestedAmount, reason } = req.body;
+    const { timeOffTypeId, allocationId, startDate, endDate, requestedAmount, reason } = req.body;
+    const ownEmployeeId = employeeForRequest(req);
+    const employeeId = req.user?.role === 'EMPLOYEE' ? ownEmployeeId : req.body.employeeId;
+    if (!employeeId) return res.status(400).json({ message: 'An employee is required for the time-off request' });
+    if (req.user?.role === 'EMPLOYEE' && req.body.employeeId && req.body.employeeId !== ownEmployeeId) return res.status(403).json({ message: 'Employees can create time-off requests only for themselves' });
 
     // Check allocation balance if provided
     let availableBalance = 0;
@@ -438,7 +483,7 @@ router.get('/salary-structures/:id', async (req, res) => {
     const structure = await prismaClient.salaryStructure.findUnique({
       where: { id: req.params.id },
       include: {
-        salaryStructureRules: {
+        structureRules: {
           include: { salaryRule: true },
           orderBy: { sequence: 'asc' },
         },
@@ -460,7 +505,7 @@ router.post('/salary-structures', async (req, res) => {
         name,
         code,
         description,
-        salaryStructureRules: {
+        structureRules: {
           create: rules.map((ruleId) => ({
             salaryRuleId: ruleId,
             sequence: 0,
@@ -517,13 +562,13 @@ router.post('/salary-structures/:structureId/compute', async (req, res) => {
       // Get payrun with salary structure
       const payrun = await tx.payrun.findUnique({
         where: { id: payrunId },
-        include: { salaryStructure: { include: { salaryStructureRules: { include: { salaryRule: true } } } } },
+        include: { salaryStructure: { include: { structureRules: { include: { salaryRule: true } } } } },
       });
 
       if (!payrun) throw new Error('Payrun not found');
 
       // Compute payroll
-      const rules = payrun.salaryStructure.salaryStructureRules
+      const rules = payrun.salaryStructure.structureRules
         .sort((a, b) => a.sequence - b.sequence)
         .map((sr) => sr.salaryRule);
 
@@ -583,7 +628,13 @@ router.post('/salary-structures/:structureId/compute', async (req, res) => {
 // ==========================================
 router.post('/payruns', async (req, res) => {
   try {
-    const { name, salaryStructureId, periodStart, periodEnd } = req.body;
+    const { name, salaryStructureId, periodStart, periodEnd, employeeIds = [] } = req.body;
+    if (!name || !salaryStructureId || !periodStart || !periodEnd) return res.status(400).json({ message: 'Name, salary structure, and payrun period are required' });
+    if (!Array.isArray(employeeIds) || !employeeIds.length) return res.status(400).json({ message: 'Select at least one employee for the payrun' });
+    const createdById = req.user?.employee?.id || req.user?.employeeId;
+    if (!createdById) return res.status(400).json({ message: 'The signed-in user does not have an employee profile and cannot create a payrun' });
+    const employeeCount = await prismaClient.employee.count({ where: { id: { in: employeeIds } } });
+    if (employeeCount !== new Set(employeeIds).size) return res.status(400).json({ message: 'One or more selected employees no longer exist. Refresh and try again.' });
 
     const payrun = await prismaClient.payrun.create({
       data: {
@@ -592,10 +643,12 @@ router.post('/payruns', async (req, res) => {
         periodStart: new Date(periodStart),
         periodEnd: new Date(periodEnd),
         status: 'DRAFT',
-        createdById: req.user.employeeId,
+        createdById,
       },
       include: { salaryStructure: true },
     });
+
+    selectedEmployeesByPayrun.set(payrun.id, [...new Set(employeeIds)]);
 
     res.status(201).json(payrun);
   } catch (error) {
@@ -662,14 +715,32 @@ router.post('/payruns/:id/compute', async (req, res) => {
 
     const payrun = await prismaClient.payrun.findUnique({
       where: { id: payrunId },
-      include: { salaryStructure: { include: { salaryStructureRules: { include: { salaryRule: true } } } } },
+      include: { salaryStructure: { include: { structureRules: { include: { salaryRule: true } } } } },
     });
 
     if (!payrun || payrun.status !== 'DRAFT') {
       return res.status(400).json({ message: 'Payrun not in DRAFT status' });
     }
 
-    const selectedIds = selectedEmployeesByPayrun.get(payrunId) || [];
+    let selectedIds = selectedEmployeesByPayrun.get(payrunId) || [];
+    // The selection cache is in memory. Rebuild it after a backend restart so
+    // an already-created draft payrun can still be computed.
+    if (!selectedIds.length) {
+      const eligible = await prismaClient.employee.findMany({
+        where: {
+          contracts: {
+            some: {
+              status: 'ACTIVE',
+              startDate: { lte: payrun.periodEnd },
+              OR: [{ endDate: null }, { endDate: { gte: payrun.periodStart } }],
+            },
+          },
+        },
+        select: { id: true },
+      });
+      selectedIds = eligible.map((employee) => employee.id);
+      if (selectedIds.length) selectedEmployeesByPayrun.set(payrunId, selectedIds);
+    }
     if (!selectedIds.length) return res.status(400).json({ message: 'Select at least one employee before computing the payrun' });
     const employees = await prismaClient.employee.findMany({
       where: { id: { in: selectedIds } },
@@ -678,8 +749,7 @@ router.post('/payruns/:id/compute', async (req, res) => {
 
     // Compute payslips for each employee
     const warnings = [];
-    const payslipPromises = employees.map((employee) =>
-      prismaClient.$transaction(async (tx) => {
+    const payslipPromises = employees.map(async (employee) => {
         // Find active contract for this period
         const contract = employee.contracts.find(
           (c) => c.status === 'ACTIVE' &&
@@ -698,7 +768,7 @@ router.post('/payruns/:id/compute', async (req, res) => {
         }
 
         // Get salary rules in sequence order
-        const rules = payrun.salaryStructure.salaryStructureRules
+        const rules = payrun.salaryStructure.structureRules
           .sort((a, b) => a.sequence - b.sequence)
           .map((sr) => sr.salaryRule);
 
@@ -738,7 +808,7 @@ router.post('/payruns/:id/compute', async (req, res) => {
           }
         }
 
-        const attendance = await tx.attendance.findMany({ where: { employeeId: employee.id, attendanceDate: { gte: payrun.periodStart, lte: payrun.periodEnd } } });
+        const attendance = await prismaClient.attendance.findMany({ where: { employeeId: employee.id, attendanceDate: { gte: payrun.periodStart, lte: payrun.periodEnd } } });
         const workedDays = attendance.filter((entry) => ['PRESENT', 'LATE', 'OVERTIME'].includes(entry.status)).length;
         const workedHours = employee.workingSchedule && employee.workingSchedule.lines
           ? calculateWorkedHours(employee.workingSchedule)
@@ -747,12 +817,12 @@ router.post('/payruns/:id/compute', async (req, res) => {
         const netAmount = grossAmount - contributionAmount;
 
         // Create payslip
-        const payslip = await tx.payslip.create({
+        const payslip = await prismaClient.payslip.create({
           data: {
-            payrunId: payrun.id,
-            employeeId: employee.id,
-            contractId: contract.id,
-            salaryStructureId: payrun.salaryStructureId,
+            payrun: { connect: { id: payrun.id } },
+            employee: { connect: { id: employee.id } },
+            contract: { connect: { id: contract.id } },
+            salaryStructure: { connect: { id: payrun.salaryStructureId } },
             periodStart: payrun.periodStart,
             periodEnd: payrun.periodEnd,
             workedDays,
@@ -769,11 +839,11 @@ router.post('/payruns/:id/compute', async (req, res) => {
 
         // Check for warnings
         if (!employee.bankAccountNumber) {
-          await tx.payrollWarning.create({
+          await prismaClient.payrollWarning.create({
             data: {
-              payrunId: payrun.id,
-              payslipId: payslip.id,
-              employeeId: employee.id,
+              payrun: { connect: { id: payrun.id } },
+              payslip: { connect: { id: payslip.id } },
+              employee: { connect: { id: employee.id } },
               type: 'MISSING_BANK_DETAILS',
               severity: 'WARNING',
               message: `Employee missing bank account details`,
@@ -782,8 +852,7 @@ router.post('/payruns/:id/compute', async (req, res) => {
         }
 
         return payslip;
-      })
-    );
+    });
 
     const results = await Promise.all(payslipPromises);
     const validPayslips = results.filter((r) => r !== null);
