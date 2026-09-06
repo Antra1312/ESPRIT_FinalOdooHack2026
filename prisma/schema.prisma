@@ -148,6 +148,8 @@ model User {
   role         Role      @default(EMPLOYEE)
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
+  resetTokenHash String?
+  resetTokenExpiresAt DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

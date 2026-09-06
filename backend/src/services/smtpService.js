@@ -37,12 +37,7 @@ function buildMessage({ from, to, subject, text, attachment }) {
     '',
     text,
     '',
-    `--${boundary}`,
-    `Content-Type: application/pdf; name="${attachment.filename}"`,
-    'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="${attachment.filename}"`,
-    '',
-    attachment.content.toString('base64').match(/.{1,76}/g).join('\r\n'),
+    ...(attachment ? [`--${boundary}`, `Content-Type: application/pdf; name="${attachment.filename}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${attachment.filename}"`, '', attachment.content.toString('base64').match(/.{1,76}/g).join('\r\n')] : []),
     `--${boundary}--`,
     '',
   ].join('\r\n');

@@ -7,6 +7,8 @@ const { router: hrPayrollRouter, initPrisma } = require('./src/routes/hrPayroll'
 const { buildPayslipPdf } = require('./src/services/payslipDeliveryService');
 const { sendSmtp, verifySmtp } = require('./src/services/smtpService');
 const { authenticate, generateToken } = require('./src/utils/jwt');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
@@ -40,7 +42,7 @@ app.post('/api/auth/login', async (req, res) => {
       where: { email },
       select: { id: true, email: true, passwordHash: true, role: true, isActive: true, employee: { select: { id: true } } },
     });
-    const valid = user && user.isActive && (user.passwordHash === password || (password === 'seeded-demo-password' && user.passwordHash === 'seeded-demo-password-hash'));
+    const valid = user && user.isActive && await bcrypt.compare(password, user.passwordHash);
     if (!valid) return res.status(401).json({ message: 'Invalid credentials' });
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     res.json({ token: generateToken({ userId: user.id }), user: { id: user.id, email: user.email, role: user.role, employeeId: user.employee?.id || null } });
@@ -49,10 +51,67 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    await databaseReady;
+    const { firstName, lastName, email, password } = req.body || {};
+    if (!firstName || !lastName || !email || !password) return res.status(400).json({ message: 'First name, last name, email and password are required' });
+    if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return res.status(409).json({ message: 'An account already exists for this email' });
+    const passwordHash = await bcrypt.hash(password, 12);
+    const employeeCode = `EMP-${Date.now()}`;
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        role: 'EMPLOYEE',
+        employee: {
+          create: { employeeCode, firstName, lastName, workEmail: email, joiningDate: new Date(), status: 'ACTIVE', employmentType: 'FULL_TIME' },
+        },
+      },
+      include: { employee: { select: { id: true } } },
+    });
+    return res.status(201).json({ token: generateToken({ userId: user.id }), user: { id: user.id, email: user.email, role: user.role, employeeId: user.employee.id } });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    await databaseReady;
+    const email = req.body?.email?.trim().toLowerCase();
+    const generic = { message: 'If an account exists for that email, a password-reset link has been sent.' };
+    if (!email) return res.status(400).json({ message: 'Email is required' });
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return res.json(generic);
+    const token = crypto.randomBytes(32).toString('hex');
+    await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: crypto.createHash('sha256').update(token).digest('hex'), resetTokenExpiresAt: new Date(Date.now() + 15 * 60 * 1000) } });
+    const link = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+    await sendSmtp({ to: user.email, subject: 'PeoplePay360 password reset', text: `Use this link within 15 minutes to reset your password: ${link}` });
+    return res.json(generic);
+  } catch (error) { return res.status(502).json({ message: 'Unable to send the password-reset email. Please contact your administrator.' }); }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    await databaseReady;
+    const { token, password } = req.body || {};
+    if (!token || !password || password.length < 8) return res.status(400).json({ message: 'A valid token and an 8-character password are required' });
+    const user = await prisma.user.findFirst({ where: { resetTokenHash: crypto.createHash('sha256').update(token).digest('hex'), resetTokenExpiresAt: { gt: new Date() } } });
+    if (!user) return res.status(400).json({ message: 'This password-reset link is invalid or has expired' });
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(password, 12), resetTokenHash: null, resetTokenExpiresAt: null } });
+    return res.json({ message: 'Password reset successfully. You can now sign in.' });
+  } catch (error) { return res.status(500).json({ message: error.message }); }
+});
+
+const publicAuthPaths = new Set(['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password']);
+
 app.use('/api', async (req, res, next) => {
   try {
     await databaseReady;
-    if (req.path === '/auth/login') return next();
+    if (publicAuthPaths.has(req.path.replace(/\/+$/, '') || '/')) return next();
     if (req.headers.authorization) {
       return authenticate(req, res, next);
     }
@@ -84,6 +143,7 @@ app.use('/api', (req, res, next) => {
 app.get('/api/bootstrap', async (req, res) => {
   try {
     await databaseReady;
+    const scopedEmployeeId = req.user?.role === 'EMPLOYEE' ? req.user.employee?.id : null;
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const [employees, schedules, attendance, timeOffTypes, allocations, requests, rules, structures, payruns] = await Promise.all([
       prisma.employee.findMany({
@@ -108,11 +168,17 @@ app.get('/api/bootstrap', async (req, res) => {
     ]);
     const title = (value) => String(value || '').toLowerCase().replace(/(^|_)([a-z])/g, (_, p, c) => `${p ? ' ' : ''}${c.toUpperCase()}`);
     const period = (value) => new Date(value).toISOString().slice(0, 7);
+    const departments = [...new Map(employees.filter((employee) => employee.department).map((employee) => [employee.department.id, employee.department])).values()];
+    const jobPositions = [...new Map(employees.filter((employee) => employee.jobPosition).map((employee) => [employee.jobPosition.id, employee.jobPosition])).values()];
+    const visibleAllocations = scopedEmployeeId ? allocations.filter((row) => row.employeeId === scopedEmployeeId) : allocations;
+    const visibleRequests = scopedEmployeeId ? requests.filter((row) => row.employeeId === scopedEmployeeId) : requests;
     res.json({
+      departments: departments.map((department) => ({ id: department.id, name: department.name, code: department.code })),
+      jobPositions: jobPositions.map((position) => ({ id: position.id, title: position.title, code: position.code, departmentId: position.departmentId })),
       employees: employees.map((e) => ({
-        id: e.id, name: `${e.firstName} ${e.lastName}`, dept: e.department?.code || e.department?.name || '—',
+        id: e.id, name: `${e.firstName} ${e.lastName}`, dept: e.department?.code || e.department?.name || 'Unassigned',
         position: e.jobPosition?.title || '—', managerId: e.managerId, scheduleId: e.workingScheduleId,
-        status: title(e.status), email: e.workEmail, phone: e.phone || '', bankAccount: e.bankAccountNumber || '',
+        status: title(e.status), employeeType: title(e.employmentType), email: e.workEmail, phone: e.phone || '', bankAccount: e.bankAccountNumber || '', bankName: e.bankName || '',
         pan: e.taxIdentifier || '', joinDate: e.joiningDate,
       })),
       contracts: employees.flatMap((e) => e.contracts.map((c) => ({
@@ -131,8 +197,8 @@ app.get('/api/bootstrap', async (req, res) => {
         status: title(a.status), note: a.correctionReason || '',
       })),
       timeoffTypes: timeOffTypes.map((t) => ({ id: t.id, name: t.name, unit: t.unit.toLowerCase(), requiresAllocation: t.requiresAllocation, color: '#0EA5A0' })),
-      allocations: allocations.map((a) => ({ id: a.id, employeeId: a.employeeId, typeId: a.timeOffTypeId, allocated: Number(a.allocatedAmount), used: Number(a.usedAmount), validFrom: a.validFrom, validTo: a.validUntil, status: title(a.status) })),
-      requests: requests.map((r) => ({ id: r.id, employeeId: r.employeeId, typeId: r.timeOffTypeId, from: r.startDate, to: r.endDate, duration: Number(r.requestedAmount), status: title(r.status), reason: r.reason || '' })),
+      allocations: visibleAllocations.map((a) => ({ id: a.id, employeeId: a.employeeId, typeId: a.timeOffTypeId, allocated: Number(a.allocatedAmount), used: Number(a.usedAmount), validFrom: a.validFrom, validTo: a.validUntil, status: title(a.status) })),
+      requests: visibleRequests.map((r) => ({ id: r.id, employeeId: r.employeeId, typeId: r.timeOffTypeId, from: r.startDate, to: r.endDate, duration: Number(r.requestedAmount), status: title(r.status), reason: r.reason || '' })),
       rules: rules.map((r) => ({ id: r.id, code: r.code, name: r.name, category: title(r.category), computeType: r.computationType.toLowerCase(), baseCode: r.percentageBase || '', amount: Number(r.fixedAmount || r.percentage || 0), formula: r.formula || '' })),
       structures: structures.map((s) => ({ id: s.id, name: s.name, status: s.isActive ? 'Active' : 'Inactive', ruleIds: s.structureRules.map((r) => r.salaryRuleId) })),
       payruns: payruns.map((p) => ({ id: p.id, name: p.name, structureId: p.salaryStructureId, period: period(p.periodStart), employeeIds: p.payslips.map((s) => s.employeeId), payslipIds: p.payslips.map((s) => s.id), status: title(p.status), warnings: p.warnings.map((w) => ({ type: w.type, icon: w.severity === 'ERROR' ? '⛔' : '⚠️', employeeId: w.employeeId, message: w.message })), sent: false, createdDate: p.createdAt })),

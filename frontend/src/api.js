@@ -5,10 +5,11 @@ import { DB } from './data/mockData';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 async function request(path, options = {}) {
+  const { skipAuth = false, headers: customHeaders, ...fetchOptions } = options;
   const session = (() => { try { return JSON.parse(localStorage.getItem('peoplepay360_session')); } catch { return null; } })();
   const response = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}), ...(options.headers || {}) },
-    ...options,
+    headers: { 'Content-Type': 'application/json', ...(!skipAuth && session?.token ? { Authorization: `Bearer ${session.token}` } : {}), ...(customHeaders || {}) },
+    ...fetchOptions,
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.success === false) {
@@ -28,10 +29,10 @@ export async function loadBootstrap() {
 }
 
 export const api = {
-  login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
-  register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
-  forgotPassword: (email) => request('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
-  resetPassword: (token, password) => request('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
+  login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data), skipAuth: true }),
+  register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data), skipAuth: true }),
+  forgotPassword: (email) => request('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }), skipAuth: true }),
+  resetPassword: (token, password) => request('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }), skipAuth: true }),
   createEmployee: (data) => request('/employees', { method: 'POST', body: JSON.stringify(data) }),
   updateEmployee: (id, data) => request(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   createContract: (data) => request('/contracts', { method: 'POST', body: JSON.stringify(data) }),
