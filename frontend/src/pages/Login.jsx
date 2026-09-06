@@ -1,50 +1,11 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { DB } from '../data/mockData';
+import { api, loadBootstrap } from '../api';
 
-const ROLES = [
-  {key:'employee',label:'Employee',icon:'👨‍💻'},
-  {key:'hr_manager',label:'HR Manager',icon:'👩‍💼'},
-  {key:'hr_payroll_user',label:'HR Payroll User',icon:'💰'},
-  {key:'hr_payroll_manager',label:'Payroll Manager',icon:'🧑‍💼'},
-  {key:'admin',label:'Admin',sub:'Full access',icon:'👑'},
-];
-
-export default function Login(){
-  const {login,roleDemoUsers}=useAuth();
-  const nav=useNavigate();
-  const doLogin=(role)=>{
-    login(role);
-    nav(role==='employee'?'/employees':'/dashboard');
-  };
-  return (
-    <div id="loginScreen">
-      <div className="loginCard">
-        <div className="loginLeft">
-          <div className="logo"><span className="dot"></span>PeoplePay360</div>
-          <div>
-            <h1>Employee → Contract → Attendance → Leave → Payroll → Payslip, all in one flow.</h1>
-            <p>A connected HR & Payroll operations platform.</p>
-            <div className="flowMini">
-              <span>👤 Employees</span><span>📄 Contracts</span><span>🕐 Attendance</span><span>🏖️ Time Off</span><span>💰 Payroll</span><span>📃 Payslips</span><span>📊 Dashboard</span>
-            </div>
-          </div>
-          <div style={{fontSize:12,color:'#93A7BA'}}>Connected to the PeoplePay360 backend</div>
-        </div>
-        <div className="loginRight">
-          <h2>Welcome back</h2>
-          <div className="sub">Sign in to the HR portal. Any email/password works in this demo.</div>
-          <div className="field"><label>Work email</label><input defaultValue={DB.employees.find((employee)=>employee.id===roleDemoUsers.employee)?.email || ''} /></div>
-          <div className="field"><label>Password</label><input type="password" /></div>
-          <button className="btnPrimary" onClick={()=>doLogin('admin')}>Sign in as Admin</button>
-          <div className="demoNote">👉 Or jump straight into a role to explore permissions:</div>
-          <div className="roleGrid">
-            {ROLES.map(r=>(
-              <button key={r.key} className="roleChip" onClick={()=>doLogin(r.key)}>{r.icon} {r.label}<span className="d">{r.sub || DB.employees.find((employee)=>employee.id===roleDemoUsers[r.key])?.name || 'Backend user'}</span></button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+export default function Login() {
+  const { login } = useAuth(); const nav = useNavigate();
+  const [mode, setMode] = useState('login'); const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '' }); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const submit = async (event) => { event.preventDefault(); setBusy(true); setError(''); try { const session = mode === 'login' ? await api.login({ email: form.email, password: form.password }) : await api.register(form); login(session); await loadBootstrap(); nav(session.user.role === 'EMPLOYEE' ? '/employees' : '/payroll-dashboard', { replace: true }); } catch (err) { setError(err.message); } finally { setBusy(false); } };
+  return <div id="loginScreen"><div className="loginCard"><div className="loginLeft"><div className="logo"><span className="dot" />PeoplePay360</div><div><h1>HR and payroll, connected.</h1><p>Sign in with your registered work email and password.</p></div></div><div className="loginRight"><h2>{mode === 'login' ? 'Welcome back' : 'Create account'}</h2><form onSubmit={submit}>{mode === 'register' && <div className="formGrid"><div className="field"><label>First name</label><input required onChange={e => setForm({ ...form, firstName: e.target.value })} /></div><div className="field"><label>Last name</label><input required onChange={e => setForm({ ...form, lastName: e.target.value })} /></div></div>}<div className="field"><label>Work email</label><input required type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div><div className="field"><label>Password</label><input required type="password" minLength="8" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></div>{error && <div className="hint" style={{ color: 'var(--danger)' }}>{error}</div>}<button className="btnPrimary" disabled={busy}>{busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Register'}</button></form>{mode === 'login' && <button className="btn" style={{ width: '100%', marginTop: 10 }} onClick={() => nav('/forgot-password')}>Forgot password?</button>}<button className="btn" style={{ width: '100%', marginTop: 10 }} onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Need an account? Register' : 'Already registered? Sign in'}</button></div></div></div>;
 }

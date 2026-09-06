@@ -32,8 +32,9 @@ export default function TimeOff(){
   const [searchParams]=useSearchParams();
   const filterEmp=searchParams.get('employee');
   const filterName=filterEmp?DB.employees.find(e=>e.id===filterEmp)?.name:null;
-  const reqList=filterEmp?DB.requests.filter(r=>r.employeeId===filterEmp):DB.requests;
-  const allocList=filterEmp?DB.allocations.filter(a=>a.employeeId===filterEmp):DB.allocations;
+  const visibleEmployeeId=user.role==='employee' ? user.empId : filterEmp;
+  const reqList=visibleEmployeeId?DB.requests.filter(r=>r.employeeId===visibleEmployeeId):DB.requests;
+  const allocList=visibleEmployeeId?DB.allocations.filter(a=>a.employeeId===visibleEmployeeId):DB.allocations;
 
   return (
     <div>
