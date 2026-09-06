@@ -135,7 +135,7 @@ app.use('/api', (req, res, next) => {
     || (role === 'HR_PAYROLL_MANAGER')
     || (role === 'HR_PAYROLL_USER' && !salaryConfigPath)
     || (role === 'HR_MANAGER' && !payrollPath)
-    || (role === 'EMPLOYEE' && /^\/(employees\/[^/]+\/time-requests|time-requests)/.test(req.path));
+    || (role === 'EMPLOYEE' && /^\/(employees\/[^/]+\/time-requests|time-requests|attendance\/(check-in|check-out))/.test(req.path));
   if (!allowed) return res.status(403).json({ message: 'Insufficient permissions for this operation' });
   next();
 });
@@ -170,6 +170,7 @@ app.get('/api/bootstrap', async (req, res) => {
     const period = (value) => new Date(value).toISOString().slice(0, 7);
     const departments = [...new Map(employees.filter((employee) => employee.department).map((employee) => [employee.department.id, employee.department])).values()];
     const jobPositions = [...new Map(employees.filter((employee) => employee.jobPosition).map((employee) => [employee.jobPosition.id, employee.jobPosition])).values()];
+    const visibleAttendance = scopedEmployeeId ? attendance.filter((row) => row.employeeId === scopedEmployeeId) : attendance;
     const visibleAllocations = scopedEmployeeId ? allocations.filter((row) => row.employeeId === scopedEmployeeId) : allocations;
     const visibleRequests = scopedEmployeeId ? requests.filter((row) => row.employeeId === scopedEmployeeId) : requests;
     res.json({
@@ -190,7 +191,7 @@ app.get('/api/bootstrap', async (req, res) => {
         id: s.id, name: s.name, type: s.scheduleType,
         days: s.lines.map((l) => ({ day: title(l.dayOfWeek).slice(0, 3), on: true, start: new Date(l.startTime).toISOString().slice(11, 16), end: new Date(l.endTime).toISOString().slice(11, 16), brk: l.breakMinutes })),
       })),
-      attendance: attendance.map((a) => ({
+      attendance: visibleAttendance.map((a) => ({
         id: a.id, employeeId: a.employeeId, date: a.attendanceDate,
         checkIn: a.checkIn ? new Date(a.checkIn).toISOString().slice(11, 16) : '',
         checkOut: a.checkOut ? new Date(a.checkOut).toISOString().slice(11, 16) : '',

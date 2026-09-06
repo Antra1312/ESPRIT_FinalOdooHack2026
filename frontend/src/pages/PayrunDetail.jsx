@@ -8,6 +8,7 @@ export default function PayrunDetail(){
   const nav=useNavigate();
   const pr=DB.payruns.find(p=>p.id===id);
   const [tick,setTick]=useState(0);
+  const [emailSummary,setEmailSummary]=useState('');
   if(!pr) return <div>Not found</div>;
   const structure=getStructure(pr.structureId);
 
@@ -89,12 +90,15 @@ export default function PayrunDetail(){
   };
   const send=async ()=>{
     if (pr.id.length > 20) {
+      if (!['Validated','Paid'].includes(pr.status)) return alert('Validate or mark this payrun as paid before emailing payslips.');
+      if (!window.confirm(`Send ${payslips.length} payslip email(s) for ${pr.name}?`)) return;
       try {
-        await api.sendPayrun(pr.id);
+        const result=await api.sendPayrun(pr.id);
         pr.sent=true;
+        setEmailSummary(result.message || 'Payslip emails sent.');
         setTick(x=>x+1);
       } catch (error) {
-        alert(error.message);
+        setEmailSummary(`Email delivery failed: ${error.message}`);
       }
       return;
     }
@@ -112,9 +116,11 @@ export default function PayrunDetail(){
           <button className="btn solid" onClick={compute} disabled={pr.status==='Paid'}>Compute</button>
           <button className="btn" onClick={validate} disabled={pr.status==='Draft' || pr.status==='Paid'}>Validate</button>
           <button className="btn" onClick={markPaid} disabled={pr.status!=='Validated'}>Mark Paid</button>
-          <button className="btn accent" onClick={send} disabled={!payslips.length}>Send Payslips</button>
+          <button className="btn accent" onClick={send} disabled={!payslips.length || !['Validated','Paid'].includes(pr.status)}>Send {payslips.length || ''} Payslips by Email</button>
         </div>
       </div>
+
+      {emailSummary && <div className="card" style={{marginBottom:16}}><div className="cardBody">{emailSummary}</div></div>}
 
       {pr.warnings?.length>0 && (
         <div className="card" style={{marginBottom:16,borderColor:'#F2C9CB'}}>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { DB, fmtDate, isContractActive } from '../data/mockData';
 import { api, loadBootstrap } from '../api';
+import SearchableSelect from '../components/SearchableSelect';
 
 export default function Contracts(){
   const [tick,setTick]=useState(0);
@@ -40,11 +41,11 @@ export default function Contracts(){
           <div className="modal"><div className="modalHead"><h3>New Contract</h3><button className="modalClose" onClick={()=>setShow(false)}>×</button></div>
             <div className="modalBody">
               <div className="formGrid">
-                <div className="field"><label>Employee</label><select value={form.employeeId} onChange={e=>setForm({...form,employeeId:e.target.value})}>{DB.employees.map(emp=><option key={emp.id} value={emp.id}>{emp.name} — {emp.dept}</option>)}</select></div>
-                <div className="field"><label>Position</label><select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option value="">— Select position</option>{DB.jobPositions.map(p=><option key={p.id} value={p.title}>{p.title}</option>)}</select></div>
-                <div className="field"><label>Department</label><select value={form.dept} onChange={e=>setForm({...form,dept:e.target.value})}><option value="">— Select department</option>{DB.departments.map(d=><option key={d.id} value={d.name}>{d.name}</option>)}</select></div>
+                <div className="field"><label>Employee</label><SearchableSelect value={form.employeeId} onChange={employeeId=>setForm({...form,employeeId})} options={DB.employees.map(employee=>({value:employee.id,label:`${employee.name} — ${employee.dept}`}))} /></div>
+                <div className="field"><label>Position</label><SearchableSelect value={form.position} onChange={position=>setForm({...form,position})} emptyLabel="Select position" options={DB.jobPositions.map(position=>({value:position.title,label:position.title}))} /></div>
+                <div className="field"><label>Department</label><SearchableSelect value={form.dept} onChange={dept=>setForm({...form,dept})} emptyLabel="Select department" options={DB.departments.map(department=>({value:department.name,label:department.name}))} /></div>
                 <div className="field"><label>Wage</label><input type="number" placeholder="e.g. 50000" value={form.wage} onChange={e=>setForm({...form,wage:e.target.value})} /></div>
-                <div className="field"><label>Salary Structure</label><select value={form.structureId} onChange={e=>setForm({...form,structureId:e.target.value})}>{DB.structures.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                <div className="field"><label>Salary Structure</label><SearchableSelect value={form.structureId} onChange={structureId=>setForm({...form,structureId})} options={DB.structures.map(structure=>({value:structure.id,label:structure.name}))} /></div>
                 <div className="field"><label>Start Date</label><input type="date" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})} /></div>
                 <div className="field"><label>End Date (leave blank for ongoing)</label><input type="date" value={form.endDate} onChange={e=>setForm({...form,endDate:e.target.value})} /></div>
               </div>

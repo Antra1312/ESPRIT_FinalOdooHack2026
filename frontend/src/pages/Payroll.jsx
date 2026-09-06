@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { DB, periodLabel, pickContractForPeriod, getStructure } from '../data/mockData';
 import { api, loadBootstrap } from '../api';
 import { useAuth } from '../context/AuthContext';
+import SearchableSelect from '../components/SearchableSelect';
 
 export default function Payroll(){
   const nav=useNavigate();
@@ -56,9 +57,7 @@ export default function Payroll(){
               {wizardStep===1 ? (
                 <>
                   <div className="field"><label>Salary Structure</label>
-                    <select value={wizardStructure} onChange={e=>setWizardStructure(e.target.value)}>
-                      {DB.structures.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                    <SearchableSelect value={wizardStructure} onChange={setWizardStructure} options={DB.structures.map(structure=>({value:structure.id,label:structure.name}))} />
                   </div>
                   <div className="field"><label>Period (YYYY-MM)</label><input value={wizardPeriod} onChange={e=>setWizardPeriod(e.target.value)} placeholder="2026-09" /></div>
                 </>
